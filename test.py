@@ -37,6 +37,6 @@ def main(algorithm):
     env.close()
 
 if __name__ == "__main__":
-    algorithm = PPOAlgorithm()
-    # algorithm = MyCustomAlgorithm()
+    # algorithm = PPOAlgorithm()
+    algorithm = MyCustomAlgorithm()
     main(algorithm)

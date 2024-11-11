@@ -1,6 +1,7 @@
 import numpy as np
 from stable_baselines3 import PPO
 from abc import ABC, abstractmethod
+from my_algorithm import *
 
 class BaseAlgorithm(ABC):
     @abstractmethod 
@@ -19,13 +20,19 @@ class BaseAlgorithm(ABC):
 
 class MyCustomAlgorithm(BaseAlgorithm):
     def __init__(self):
-        # 自定义初始化
+        self.state_dim = 12
+        self.hidden_dim = 128
+        self.action_dim = 6
+        self.actor = PolicyNet(self.state_dim, self.hidden_dim, self.action_dim)
+        self.actor.load_state_dict(torch.load('output/202411111405/actor_best.pth'))
         pass
         
     def get_action(self, observation):
-        # 输入观测值，返回动作
-        action = np.random.uniform(-1, 1, 6)
-        return action
+        state = torch.tensor([observation[0]], dtype=torch.float)
+        mu, sigma = self.actor(state)
+        action_dist = torch.distributions.Normal(mu, sigma)
+        action = action_dist.sample()
+        return action.squeeze(0).tolist()
 
 # 示例：使用PPO预训练模型
 class PPOAlgorithm(BaseAlgorithm):
