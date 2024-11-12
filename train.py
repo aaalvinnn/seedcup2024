@@ -15,7 +15,7 @@ import reward_algorithm
 def env_step_log(env, action, reward):
     print(f"Step: {env.step_num}, Distance: {env.get_dis()}, Reward: {reward}, State: {env.get_observation()[0][:6]}, Action: {action}")
 
-def main(algorithm, num_episodes, config):
+def main(algorithm, num_episodes, config, seed=100):
     cur_time = datetime.now()
     output_fir_name = os.path.join("output", cur_time.strftime("%Y%m%d%H%M") + "_" + config)
     output_dir = os.path.join(os.path.dirname(__file__), output_fir_name)
@@ -26,15 +26,15 @@ def main(algorithm, num_episodes, config):
     log_file = open(os.path.join(output_dir, 'log.txt'), 'w+')
     sys.stdout = log_file
 
-    env = Env(is_senior=True,seed=100,gui=False)
+    env = Env(is_senior=True,seed=seed,gui=False)
     done = False
     best_return = 0
     total_reward_list = []
 
-    for i in range(10):
-        with tqdm(total=int(num_episodes/10), desc='Iteration %d' % i) as pbar:
-            for i_episode in range(int(num_episodes/10)):
-                epoch = num_episodes / 10 * i + i_episode + 1
+    for i in range(20):
+        with tqdm(total=int(num_episodes/20), desc='Iteration %d' % i) as pbar:
+            for i_episode in range(int(num_episodes/20)):
+                epoch = num_episodes / 20 * i + i_episode + 1
                 score = 0
                 total_reward = 0
                 done = False
@@ -47,11 +47,7 @@ def main(algorithm, num_episodes, config):
                     _ = env.step(action)
                     new_state = env.get_observation()
                     done = env.terminated
-                    # reward = 1 / (1 + 4*env.get_dis())
-                    # reward = 1 / (env.get_dis() + 0.01)**2
-                    # reward = 1 - (env.get_dis() - 0.2)/0.15
-                    # reward = reward_algorithm.reward_2(env.get_dis())
-                    reward = reward_algorithm.reward_4(env.get_dis(), env.obstacle_contact)
+                    reward = reward_algorithm.reward_total_5(env.get_dis(), env.is_obstacle_contact())
                     env_step_log(env, action, reward)
                     total_reward += reward
                     score += env.success_reward
@@ -60,9 +56,6 @@ def main(algorithm, num_episodes, config):
                     transition_dict['next_states'].append(new_state[0])
                     transition_dict['rewards'].append(reward)
                     transition_dict['dones'].append(done)
-
-                    if env.obstacle_contact:
-                        break
                 
                 total_reward_list.append(total_reward)
                 actor_loss = 0
@@ -85,8 +78,8 @@ def main(algorithm, num_episodes, config):
                     torch.save(algorithm.critic.state_dict(), os.path.join(output_dir, 'critic_best.pth'))
 
                 display_reward = 0
-                if epoch % (num_episodes/10) == 0:
-                    display_reward = np.mean(total_reward_list[-int(num_episodes/10):])
+                if epoch % (num_episodes/20) == 0:
+                    display_reward = np.mean(total_reward_list[-int(num_episodes/20):])
                 else:
                     display_reward = total_reward
                 pbar.set_postfix({

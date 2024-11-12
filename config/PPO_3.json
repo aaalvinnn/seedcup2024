@@ -1,6 +1,6 @@
 {
     "config_name": "PPO-3",
-    "actor_lr": 1e-4,
+    "actor_lr": 2e-4,
     "critic_lr": 5e-4,
     "num_episodes": 1000,
     "state_dim": 12,

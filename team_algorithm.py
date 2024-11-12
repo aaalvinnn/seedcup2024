@@ -1,7 +1,8 @@
-import numpy as np
 from stable_baselines3 import PPO
 from abc import ABC, abstractmethod
-from my_algorithm import *
+import torch
+import torch.nn.functional as F
+import os
 
 class BaseAlgorithm(ABC):
     @abstractmethod 
@@ -18,13 +19,34 @@ class BaseAlgorithm(ABC):
         """
         pass
 
+class PolicyNet(torch.nn.Module):
+    def __init__(self, state_dim, hidden_dim, action_dim, num_hidden_layers=2):
+        super(PolicyNet, self).__init__()
+        # input layer
+        self.layers = torch.nn.ModuleList()
+        self.layers.append(torch.nn.Linear(state_dim, hidden_dim))
+        # hidden layers
+        for _ in range(num_hidden_layers - 1):
+            self.layers.append(torch.nn.Linear(hidden_dim, hidden_dim))
+        # output layers
+        self.fc_mu = torch.nn.Linear(hidden_dim, action_dim)
+        self.fc_std = torch.nn.Linear(hidden_dim, action_dim)
+
+    def forward(self, x):
+        for layer in self.layers:
+            x = F.relu(layer(x))
+        mu = torch.tanh(self.fc_mu(x))
+        std = F.softplus(self.fc_std(x))
+        return mu, std
+    
 class MyCustomAlgorithm(BaseAlgorithm):
     def __init__(self):
         self.state_dim = 12
-        self.hidden_dim = 128
+        self.hidden_dim = 64
         self.action_dim = 6
-        self.actor = PolicyNet(self.state_dim, self.hidden_dim, self.action_dim, 3)
-        self.actor.load_state_dict(torch.load('output/202411120025_PPO-3/actor_best.pth'))
+        self.actor = PolicyNet(self.state_dim, self.hidden_dim, self.action_dim, 4)
+        model_path = os.path.join(os.path.dirname(__file__), "model.pth")
+        self.actor.load_state_dict(torch.load(model_path))
         pass
         
     def get_action(self, observation):
