@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 import numpy as np
+import torch.nn as nn
 
 # PPO compute advantage funciton
 def compute_advantage(gamma, lmbda, td_delta):
@@ -50,12 +51,22 @@ class ValueNet(torch.nn.Module):
             x = F.relu(layer(x))
         return self.fc_out(x)
 
+def initialize_weights(m):
+    if isinstance(m, nn.Linear):
+        # 使用Kaiming正态分布初始化权重
+        nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
+        # 初始化偏置为零
+        if m.bias is not None:
+            nn.init.constant_(m.bias, 0)
+
 class myPPOAlgorithm:
     ''' 处理连续动作的PPO算法 '''
     def __init__(self, state_dim, hidden_dim, action_dim, actor_lr, critic_lr, lmbda, epochs, eps, gamma, device, num_actor_hidden_layers=None, num_critic_hidden_layers=None):
         self.actor_dim = action_dim
         self.actor = PolicyNet(state_dim, hidden_dim, action_dim, num_actor_hidden_layers).to(device)
         self.critic = ValueNet(state_dim, hidden_dim, num_critic_hidden_layers).to(device)
+        self.actor.apply(initialize_weights)
+        self.critic.apply(initialize_weights)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
         self.gamma = gamma
