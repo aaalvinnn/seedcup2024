@@ -14,48 +14,50 @@ def compute_advantage(gamma, lmbda, td_delta):
     return torch.tensor(advantage_list, dtype=torch.float)
 
 class PolicyNet(torch.nn.Module):
-    def __init__(self, state_dim, hidden_dim, action_dim):
+    def __init__(self, state_dim, hidden_dim, action_dim, num_hidden_layers=2):
         super(PolicyNet, self).__init__()
-        self.fc1 = torch.nn.Linear(state_dim, hidden_dim)
-        self.fc2 = torch.nn.Linear(hidden_dim, hidden_dim)
-        # self.fc3 = torch.nn.Linear(hidden_dim, hidden_dim)
+        # input layer
+        self.layers = torch.nn.ModuleList()
+        self.layers.append(torch.nn.Linear(state_dim, hidden_dim))
+        # hidden layers
+        for _ in range(num_hidden_layers - 1):
+            self.layers.append(torch.nn.Linear(hidden_dim, hidden_dim))
+        # output layers
         self.fc_mu = torch.nn.Linear(hidden_dim, action_dim)
         self.fc_std = torch.nn.Linear(hidden_dim, action_dim)
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        # x = F.relu(self.fc3(x))
+        for layer in self.layers:
+            x = F.relu(layer(x))
         mu = torch.tanh(self.fc_mu(x))
         std = F.softplus(self.fc_std(x))
         return mu, std
 
 class ValueNet(torch.nn.Module):
-    def __init__(self, state_dim, hidden_dim):
+    def __init__(self, state_dim, hidden_dim, num_hidden_layers=2):
         super(ValueNet, self).__init__()
-        self.fc1 = torch.nn.Linear(state_dim, hidden_dim)
-        self.fc2 = torch.nn.Linear(hidden_dim, hidden_dim)
-        # self.fc3 = torch.nn.Linear(hidden_dim, hidden_dim)
-        self.fc4 = torch.nn.Linear(hidden_dim, 1)
+        # input layer
+        self.layers = torch.nn.ModuleList()
+        self.layers.append(torch.nn.Linear(state_dim, hidden_dim))
+        # hidden layers
+        for _ in range(num_hidden_layers - 1):
+            self.layers.append(torch.nn.Linear(hidden_dim, hidden_dim))
+        # output layers
+        self.fc_out = torch.nn.Linear(hidden_dim, 1)
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        # x = F.relu(self.fc3(x))
-        return self.fc4(x)
+        for layer in self.layers:
+            x = F.relu(layer(x))
+        return self.fc_out(x)
 
 class myPPOAlgorithm:
     ''' 处理连续动作的PPO算法 '''
-    def __init__(self, state_dim, hidden_dim, action_dim, actor_lr, critic_lr,
-                 lmbda, epochs, eps, gamma, device):
+    def __init__(self, state_dim, hidden_dim, action_dim, actor_lr, critic_lr, lmbda, epochs, eps, gamma, device, num_actor_hidden_layers=None, num_critic_hidden_layers=None):
         self.actor_dim = action_dim
-        self.actor = PolicyNet(state_dim, hidden_dim,
-                                         action_dim).to(device)
-        self.critic = ValueNet(state_dim, hidden_dim).to(device)
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(),
-                                                lr=actor_lr)
-        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(),
-                                                 lr=critic_lr)
+        self.actor = PolicyNet(state_dim, hidden_dim, action_dim, num_actor_hidden_layers).to(device)
+        self.critic = ValueNet(state_dim, hidden_dim, num_critic_hidden_layers).to(device)
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
         self.gamma = gamma
         self.lmbda = lmbda
         self.epochs = epochs

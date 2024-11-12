@@ -23,8 +23,8 @@ class MyCustomAlgorithm(BaseAlgorithm):
         self.state_dim = 12
         self.hidden_dim = 128
         self.action_dim = 6
-        self.actor = PolicyNet(self.state_dim, self.hidden_dim, self.action_dim)
-        self.actor.load_state_dict(torch.load('output/202411111405/actor_best.pth'))
+        self.actor = PolicyNet(self.state_dim, self.hidden_dim, self.action_dim, 3)
+        self.actor.load_state_dict(torch.load('output/202411120025_PPO-3/actor_best.pth'))
         pass
         
     def get_action(self, observation):

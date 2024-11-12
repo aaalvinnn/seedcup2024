@@ -1,0 +1,15 @@
+{
+    "config_name": "PPO-4",
+    "actor_lr": 1e-4,
+    "critic_lr": 5e-4,
+    "num_episodes": 2000,
+    "state_dim": 12,
+    "hidden_dim": 160,
+    "action_dim": 6,
+    "num_actor_hidden_layers": 3,
+    "num_critic_hidden_layers": 3,
+    "gamma": 0.98,
+    "lmbda": 0.95,
+    "epochs": 10,
+    "eps": 0.2
+}
