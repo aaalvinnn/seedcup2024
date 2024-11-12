@@ -129,3 +129,18 @@ class Env:
 
     def close(self):
         self.p.disconnect()
+
+    def is_obstacle_contact(self):
+        """
+        判断是否接触到障碍物，在不修改env.py的情况下，作为接口供train.py使用
+        """
+        # 获取与桌子和障碍物的接触点
+        table_contact_points = self.p.getContactPoints(bodyA=self.fr5, bodyB=self.table)
+        obstacle1_contact_points = self.p.getContactPoints(bodyA=self.fr5, bodyB=self.obstacle1)
+
+        for contact_point in table_contact_points or obstacle1_contact_points:
+            link_index = contact_point[3]
+            if link_index not in [0, 1]:
+                return True
+            
+        return False
