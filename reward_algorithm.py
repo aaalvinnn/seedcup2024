@@ -59,8 +59,74 @@ def reward_total_4(dist, obstacle_contact):
         return -1
     return reward_dist_5(dist)
 
-def reward_total_5(dist, obstacle_contact):
+def reward_total_5(dist, obstacle_contact):     # release v1
     # 碰到障碍物，这个step计算负奖励，不影响之后的step
     if obstacle_contact:
         return -1 + reward_dist_2_1(dist)
     return reward_dist_2_1(dist)
+
+def reward_total_5_1(dist, obstacle_contact):
+    # 碰到障碍物，这个step计算负奖励，不影响之后的step
+    if obstacle_contact:
+        return -1 + reward_dist_4(dist)
+    return reward_dist_4(dist)
+
+def reward_total_6(dist, pre_dist, obstacle_contact):
+    reward = 1 - (dist - 0.3) * 10
+    # 考虑delta dist
+    delta = (dist - pre_dist)
+    reward -= delta * 20
+    if obstacle_contact:
+        reward -= 1
+
+    return reward
+
+def reward_total_7(dist, pre_dist, obstacle_contact):
+    reward = 0
+    if dist > 0.3:
+        reward = 2 - (dist - 0.3) * 20
+    else:
+        reward = 1 / (0.2 + dist)
+    # 考虑delta dist (about 0.005m)
+    delta = (dist - pre_dist)
+    reward -= delta * 40
+    if obstacle_contact:
+        reward -= 1
+
+    return reward
+
+def reward_total_7_1(dist, pre_dist, obstacle_contact):
+    reward = 0
+    if dist > 0.2:
+        reward = 2 - (dist - 0.2) * 20
+    else:
+        reward = 1 / (0.3 + dist)
+    # 考虑delta dist (about 0.005m)
+    delta = (dist - pre_dist)
+    reward -= delta * 40
+    if obstacle_contact:
+        reward -= 1
+
+    return reward
+
+def reward_total_8(dist, pre_dist, obstacle_contact):
+    reward = 1 - (dist - 0.3) * 15
+
+    # 考虑delta dist (about 0.005m)
+    delta = (dist - pre_dist)
+    reward -= delta * 50
+    if obstacle_contact:
+        reward -= 1
+
+    return reward
+
+def reward_total_8_1(dist, pre_dist, obstacle_contact):
+    reward = 1 - (dist - 0.3) * 20
+
+    # 考虑delta dist (about 0.005m)
+    delta = (dist - pre_dist)
+    reward -= delta * 50
+    # if obstacle_contact:
+    #     reward -= 1
+
+    return reward

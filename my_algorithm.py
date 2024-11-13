@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 import torch.nn as nn
+import torch.optim as optim
 
 # PPO compute advantage funciton
 def compute_advantage(gamma, lmbda, td_delta):
@@ -61,14 +62,21 @@ def initialize_weights(m):
 
 class myPPOAlgorithm:
     ''' 处理连续动作的PPO算法 '''
-    def __init__(self, state_dim, hidden_dim, action_dim, actor_lr, critic_lr, lmbda, epochs, eps, gamma, device, num_actor_hidden_layers=None, num_critic_hidden_layers=None):
+    def __init__(self, nums_episodes, state_dim, actor_hidden_dim, critic_hidden_dim, action_dim, actor_lr, critic_lr, lmbda, epochs, eps, gamma, device, 
+                num_actor_hidden_layers=None, num_critic_hidden_layers=None, actor_pretrained_model=None, critic_pretrained_model=None):
         self.actor_dim = action_dim
-        self.actor = PolicyNet(state_dim, hidden_dim, action_dim, num_actor_hidden_layers).to(device)
-        self.critic = ValueNet(state_dim, hidden_dim, num_critic_hidden_layers).to(device)
-        self.actor.apply(initialize_weights)
-        self.critic.apply(initialize_weights)
+        self.actor = PolicyNet(state_dim, actor_hidden_dim, action_dim, num_actor_hidden_layers).to(device)
+        self.critic = ValueNet(state_dim, critic_hidden_dim, num_critic_hidden_layers).to(device)
+        if (actor_pretrained_model is None):
+            self.actor.apply(initialize_weights)
+            self.critic.apply(initialize_weights)
+        else:
+            self.actor.load_state_dict(torch.load(actor_pretrained_model))
+            self.critic.load_state_dict(torch.load(critic_pretrained_model))
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
+        self.actor_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.actor_optimizer, T_max=nums_episodes, eta_min=actor_lr/10)
+        self.critic_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_optimizer, T_max=nums_episodes, eta_min=critic_lr/10)
         self.gamma = gamma
         self.lmbda = lmbda
         self.epochs = epochs
@@ -76,7 +84,7 @@ class myPPOAlgorithm:
         self.device = device
 
     def get_action(self, state):
-        state = torch.tensor([state], dtype=torch.float).to(self.device)
+        state = torch.tensor(np.array([state]), dtype=torch.float).to(self.device)
         mu, sigma = self.actor(state)
         action_dist = torch.distributions.Normal(mu, sigma)
         action = action_dist.sample()
@@ -120,7 +128,10 @@ class myPPOAlgorithm:
             critic_loss.backward()
             self.actor_optimizer.step()
             self.critic_optimizer.step()
-        
+
+        # lr decay
+        self.actor_scheduler.step()
+        self.critic_scheduler.step()
         return actor_loss.item(), critic_loss.item()
     
 class myREINFORCEAlgorithm:

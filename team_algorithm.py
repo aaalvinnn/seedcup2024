@@ -44,9 +44,9 @@ class MyCustomAlgorithm(BaseAlgorithm):
         self.state_dim = 12
         self.hidden_dim = 64
         self.action_dim = 6
-        self.actor = PolicyNet(self.state_dim, self.hidden_dim, self.action_dim, 4)
+        self.actor = PolicyNet(self.state_dim, self.hidden_dim, self.action_dim, 8)
         model_path = os.path.join(os.path.dirname(__file__), "model.pth")
-        self.actor.load_state_dict(torch.load(model_path))
+        self.actor.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
         pass
         
     def get_action(self, observation):
