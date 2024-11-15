@@ -46,7 +46,7 @@ class Env:
 
         self.obstacle1_position = [np.random.uniform(-0.2, 0.2, 1) + self.goalx[0], 0.6, np.random.uniform(0.1, 0.3, 1)]
         self.p.resetBasePositionAndOrientation(self.obstacle1, self.obstacle1_position, [0, 0, 0, 1])
-        for _ in range(100):
+        for _ in range(self.max_steps):
             self.p.stepSimulation()
 
         return self.get_observation()
