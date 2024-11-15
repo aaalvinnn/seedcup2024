@@ -1,5 +1,5 @@
 {
-    "config_name": "PPO-10_1",
+    "config_name": "PPO-12",
     "actor_lr": 1e-5,
     "critic_lr": 4e-5,
     "num_episodes": 2000,
@@ -11,8 +11,7 @@
     "num_critic_hidden_layers": 8,
     "gamma": 0.98,
     "lmbda": 0.95,
-    "epochs": 10,
-    "eps": 0.2,
-    "actor_pretrained_model": "output/1113/1329_PPO-10_1/actor_init.pth",
-    "critic_pretrained_model": "output/1113/1329_PPO-10_1/critic_init.pth"
+    "residual_strength": 0.2,
+    "epochs": 15,
+    "eps": 0.2
 }

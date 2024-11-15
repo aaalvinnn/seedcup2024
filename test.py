@@ -8,6 +8,7 @@ def main(algorithm):
     final_score = 0
     total_steps = 0
     total_distance = 0
+    total_obstacle = 0
 
     for i in range(num_episodes):
         score = 0
@@ -25,15 +26,17 @@ def main(algorithm):
         total_steps += env.step_num
         total_distance += env.get_dis()
         final_score += score
+        if env.is_obstacle_contact():
+            total_obstacle += 1
 
-        print(f"Test_{i} completed. steps:", env.step_num, "Distance:", env.get_dis(), "Score:", score)
+        print(f"Test_{i} completed. steps:", env.step_num, "Distance:", env.get_dis(), "Score:", score, "Obstacle:", env.is_obstacle_contact())
 
     final_score /= num_episodes
     avg_distance = total_distance / num_episodes
     avg_steps = total_steps / num_episodes
 
     # After exiting the loop, get the total steps and final distance
-    print("Test completed. Total steps:", avg_steps, "Final distance:", avg_distance, "Final score:", final_score)
+    print("Test completed. Total steps:", avg_steps, "Final distance:", avg_distance, "Final score:", final_score, "Total obstacle:", total_obstacle)
     env.close()
 
 if __name__ == "__main__":

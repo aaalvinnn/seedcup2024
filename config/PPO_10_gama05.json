@@ -9,7 +9,7 @@
     "action_dim": 6,
     "num_actor_hidden_layers": 8,
     "num_critic_hidden_layers": 8,
-    "gamma": 0.98,
+    "gamma": 0.5,
     "lmbda": 0.95,
     "epochs": 10,
     "eps": 0.2,

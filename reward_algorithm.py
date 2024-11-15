@@ -1,4 +1,3 @@
-import numpy as np
 import math
 
 def reward_dist_1(dist):
@@ -103,7 +102,7 @@ def reward_total_7_1(dist, pre_dist, obstacle_contact):
         reward = 1 / (0.3 + dist)
     # 考虑delta dist (about 0.005m)
     delta = (dist - pre_dist)
-    reward -= delta * 40
+    reward -= delta * 60
     if obstacle_contact:
         reward -= 1
 
@@ -125,8 +124,81 @@ def reward_total_8_1(dist, pre_dist, obstacle_contact):
 
     # 考虑delta dist (about 0.005m)
     delta = (dist - pre_dist)
+    reward -= delta * 60
+    if obstacle_contact:
+        reward -= 1
+
+    return reward
+
+def reward_total_8_1_1(dist, pre_dist, obstacle_contact):
+    reward = 1 - (dist - 0.3) * 20
+
+    # 考虑delta dist (about 0.005m)
+    delta = (dist - pre_dist)
+    reward -= delta * 60
+    # obstacle
+    if obstacle_contact:
+        reward -= 1.5
+    # # success
+    # if dist <= 0.2:
+    #     reward += 3
+
+    return reward
+
+def reward_total_8_1_1_1(dist, pre_dist, obstacle_contact):
+    reward = 1 - (dist - 0.3) * 20
+
+    # 考虑delta dist (about 0.005m)
+    delta = (dist - pre_dist)
+    reward -= delta * 60
+    # obstacle
+    if obstacle_contact:
+        reward -= 4
+    # success
+    if dist <= 0.1:
+        reward += 3
+
+    return reward
+
+def reward_total_8_2(dist, pre_dist, obstacle_contact):
+    reward = 1 - (dist - 0.3) * 20
+
+    # 考虑delta dist (about 0.005m)
+    delta = (dist - pre_dist)
+    reward -= delta * 60
+    if obstacle_contact:
+        reward -= 10
+    # success
+    if dist <= 0.3:
+        reward += 1
+    elif dist <= 0.2:
+        reward += 2
+    elif dist <= 0.1:
+        reward += 3
+
+    return reward
+
+def reward_total_8_3(dist, pre_dist, obstacle_contact):
+    reward = 2 - (dist - 0.2) * 20
+
+    # 考虑delta dist (about 0.005m)
+    delta = (dist - pre_dist)
     reward -= delta * 50
-    # if obstacle_contact:
-    #     reward -= 1
+    if obstacle_contact:
+        reward -= 1.5
+
+    return reward
+
+def reward_total_8_4(dist, pre_dist, obstacle_contact):
+    reward = 1 - (dist - 0.2) * 10
+
+    # 考虑delta dist (about 0.005m)
+    delta = (dist - pre_dist)
+    reward -= delta * 20
+    if obstacle_contact:
+        reward -= 2
+    # success
+    if dist <= 0.1:
+        reward += 5
 
     return reward
