@@ -21,8 +21,9 @@ replay_buffer = {'states': collections.deque(maxlen=replay_buffer_size*100),
                  'rewards': collections.deque(maxlen=replay_buffer_size*100),
                  'dones': collections.deque(maxlen=replay_buffer_size*100)}
 
-def env_step_log(env, action, reward, obstacle_contact):
-    print(f"Step: {env.step_num}, Distance: {env.get_dis()}, is_Obstacle: {obstacle_contact}, Reward: {reward}, State: {env.get_observation()[0][:6]}, Action: {action}")
+def env_step_log(env: Env, action, reward, obstacle_contact):
+    print(f"Step: {env.step_num}, dest_dist: {env.get_dis()}, is_Obstacle: {obstacle_contact}, Reward: {reward}")
+        # State: {env.get_observation()[0]}\nAction: {action}\n")
 
 def main(algorithm, num_episodes, config, is_log):
     if is_log:
@@ -38,7 +39,8 @@ def main(algorithm, num_episodes, config, is_log):
 
     env = Env(is_senior=True,seed=100,gui=False)
     done = False
-    best_return = 0
+    total_score_list = []
+    score100_best = 0
     total_reward_list = []
 
     for i in range(20):
@@ -49,31 +51,35 @@ def main(algorithm, num_episodes, config, is_log):
                 total_reward = 0
                 done = False
                 transition_dict = {'states': [], 'actions': [], 'next_states': [], 'rewards': [], 'dones': []}
-                state = env.reset()
+                state = algorithm.preprocess_state(env.reset()[0])
                 pre_dist = env.get_dis()
 
                 print(f"******** Episode:", epoch, "*******")
                 while not done:
-                    action = algorithm.get_action(state[0])
+                    action = algorithm.get_action(state)
                     _ = env.step(action)
-                    new_state = env.get_observation()
+                    new_state = algorithm.preprocess_state(env.get_observation()[0])
                     done = env.terminated
-                    reward = reward_algorithm.reward_total_8_1(env.get_dis(), pre_dist, env.is_obstacle_contact())
+                    reward = reward_algorithm.reward_total_8_1_1(env.get_dis(), pre_dist, env.is_obstacle_contact())
                     if is_log:
                         env_step_log(env, action, reward, env.is_obstacle_contact())
                     total_reward += reward
                     score += env.success_reward
                     pre_dist = env.get_dis()
-                    transition_dict['states'].append(state[0])
+                    transition_dict['states'].append(state)
                     transition_dict['actions'].append(action)
-                    transition_dict['next_states'].append(new_state[0])
+                    transition_dict['next_states'].append(new_state)
                     transition_dict['rewards'].append(reward)
                     transition_dict['dones'].append(done)
+
+                    # if (env.is_obstacle_contact()):
+                    #     break
                 
                 for key in replay_buffer.keys():
                     replay_buffer[key].extend(transition_dict[key])
 
                 total_reward_list.append(total_reward)
+                total_score_list.append(score)
                 actor_loss = 0
                 critic_loss = 0
                 if len(replay_buffer['states']) >= replay_buffer_size*100:
@@ -94,11 +100,12 @@ def main(algorithm, num_episodes, config, is_log):
                     torch.save(algorithm.actor.state_dict(), os.path.join(output_dir, 'actor.pth'))
                     torch.save(algorithm.critic.state_dict(), os.path.join(output_dir, 'critic.pth'))
 
-                    if (total_reward > best_return):
-                        best_return = total_reward
-                        torch.save(algorithm.actor.state_dict(), os.path.join(output_dir, 'actor_best.pth'))
-                        torch.save(algorithm.critic.state_dict(), os.path.join(output_dir, 'critic_best.pth'))
-                        torch.save(algorithm.actor.state_dict(), os.path.join(os.path.dirname(__file__), 'model_best.pth'))  # 放个在工程根目录下方便test.py测试
+                    if (epoch>=100):
+                        score100_best = np.mean(total_score_list[-100:]) if np.mean(total_score_list[-100:]) > score100_best else score100_best
+                        if (score100_best <= np.mean(total_score_list[-100:])):
+                            torch.save(algorithm.actor.state_dict(), os.path.join(output_dir, 'actor_best.pth'))
+                            torch.save(algorithm.critic.state_dict(), os.path.join(output_dir, 'critic_best.pth'))
+                            torch.save(algorithm.actor.state_dict(), os.path.join(os.path.dirname(__file__), 'model_best.pth'))  # 放个在工程根目录下方便test.py测试
                     if (epoch == 1):
                         torch.save(algorithm.actor.state_dict(), os.path.join(output_dir, 'actor_init.pth'))    # 由于随机性，保存一下初始权重，提供预训练模型
                         torch.save(algorithm.critic.state_dict(), os.path.join(output_dir, 'critic_init.pth'))
@@ -110,15 +117,20 @@ def main(algorithm, num_episodes, config, is_log):
                         torch.save(algorithm.critic.state_dict(), os.path.join(output_dir, 'critic_1500.pth'))
 
                     display_reward = 0
+                    display_score = 0
                     if epoch % (num_episodes/20) == 0:
                         display_reward = np.mean(total_reward_list[-int(num_episodes/20):])
                     else:
                         display_reward = total_reward
+                    if (epoch >= 100):
+                        display_score = np.mean(total_score_list[-100:])
                     pbar.set_postfix({
                         'episode':
                         '%d' % (epoch),
                         'return':
-                        '%.3f' % display_reward
+                        '%.3f' % display_reward,
+                        'score':
+                        '%.3f' % display_score
                     })
                     sys.stdout = sys.__stdout__
                     pbar.update(1)
@@ -139,22 +151,24 @@ if __name__ == "__main__":
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     algorithm = myPPOAlgorithm(
-    config["num_episodes"],
-    config["state_dim"],
-    config["actor_hidden_dim"],
-    config["critic_hidden_dim"],
-    config["action_dim"],
-    config["actor_lr"],
-    config["critic_lr"],
-    config["lmbda"],
-    config["epochs"],
-    config["eps"],
-    config["gamma"],
-    device,
+    nums_episodes=config["num_episodes"],
+    state_dim=config["state_dim"],
+    actor_hidden_dim=config["actor_hidden_dim"],
+    critic_hidden_dim=config["critic_hidden_dim"],
+    action_dim=config["action_dim"],
+    actor_lr=config["actor_lr"],
+    critic_lr=config["critic_lr"],
+    lmbda=config["lmbda"],
+    epochs=config["epochs"],
+    eps=config["eps"],
+    gamma=config["gamma"],
+    residual_strength=config["residual_strength"],
+    device=device,
     num_actor_hidden_layers=config["num_actor_hidden_layers"],
-    num_critic_hidden_layers=config["num_critic_hidden_layers"]
-    # actor_pretrained_model=config["actor_pretrained_model"],
-    # critic_pretrained_model=config["critic_pretrained_model"]
+    num_critic_hidden_layers=config["num_critic_hidden_layers"],
+    actor_pretrained_model=config.get("actor_pretrained_model"),
+    critic_pretrained_model=config.get("critic_pretrained_model"),
+    isTrain=True
 )
     
     main(algorithm, config["num_episodes"], config["config_name"], args.log)
