@@ -139,10 +139,10 @@ def initialize_weights(m):
 
 class myPPOAlgorithm:
     ''' 处理连续动作的PPO算法 '''
-    def __init__(self, nums_episodes, state_dim, actor_hidden_dim, critic_hidden_dim, action_dim, actor_lr, critic_lr, lmbda, epochs, eps, gamma, residual_strength, 
+    def __init__(self, nums_episodes, state_dim, actor_hidden_dim, critic_hidden_dim, actor_dim, actor_lr, critic_lr, lmbda, epochs, eps, gamma, residual_strength, 
                 device, num_actor_hidden_layers=None, num_critic_hidden_layers=None, actor_pretrained_model=None, critic_pretrained_model=None, isTrain=True):
-        self.actor_dim = action_dim
-        self.actor = PolicyNet(state_dim, actor_hidden_dim, action_dim, num_actor_hidden_layers, residual_strength).to(device)
+        self.actor_dim = actor_dim
+        self.actor = PolicyNet(state_dim, actor_hidden_dim, actor_dim, num_actor_hidden_layers, residual_strength).to(device)
         self.critic = ValueNet(state_dim, critic_hidden_dim, num_critic_hidden_layers, residual_strength).to(device)
         if (actor_pretrained_model is None):
             self.actor.apply(initialize_weights)
@@ -240,41 +240,41 @@ class myPPOAlgorithm:
         self.critic_scheduler.step()
         return actor_loss.item(), critic_loss.item()
     
-class myREINFORCEAlgorithm:
-    def __init__(self, state_dim, hidden_dim, action_dim, learning_rate, gamma,
-                 device):
-        self.policy_net = PolicyNet(state_dim, hidden_dim,
-                                    action_dim).to(device)
-        self.optimizer = torch.optim.Adam(self.policy_net.parameters(),
-                                          lr=learning_rate)  # 使用Adam优化器
-        self.gamma = gamma  # 折扣因子
-        self.device = device
+# class myREINFORCEAlgorithm:
+#     def __init__(self, state_dim, hidden_dim, action_dim, learning_rate, gamma,
+#                  device):
+#         self.policy_net = PolicyNet(state_dim, hidden_dim,
+#                                     action_dim).to(device)
+#         self.optimizer = torch.optim.Adam(self.policy_net.parameters(),
+#                                           lr=learning_rate)  # 使用Adam优化器
+#         self.gamma = gamma  # 折扣因子
+#         self.device = device
 
-    def get_action(self, state):  # 根据动作概率分布随机采样
-        state = torch.tensor([state], dtype=torch.float).to(self.device)
-        mu, sigma = self.policy_net(state)
-        action_dist = torch.distributions.Normal(mu, sigma)
-        action = action_dist.sample()
-        return action.squeeze(0).tolist()   # 6 dimensional action
+#     def get_action(self, state):  # 根据动作概率分布随机采样
+#         state = torch.tensor([state], dtype=torch.float).to(self.device)
+#         mu, sigma = self.policy_net(state)
+#         action_dist = torch.distributions.Normal(mu, sigma)
+#         action = action_dist.sample()
+#         return action.squeeze(0).tolist()   # 6 dimensional action
 
-    def update(self, transition_dict):
-        reward_list = transition_dict['rewards']
-        state_list = transition_dict['states']
-        action_list = transition_dict['actions']
+#     def update(self, transition_dict):
+#         reward_list = transition_dict['rewards']
+#         state_list = transition_dict['states']
+#         action_list = transition_dict['actions']
 
-        G = 0
-        self.optimizer.zero_grad()
-        for i in reversed(range(len(reward_list))):  # 从最后一步算起
-            reward = reward_list[i]
-            state = torch.tensor([state_list[i]],
-                                 dtype=torch.float).to(self.device)
-            action = torch.tensor([action_list[i]]).to(self.device)
-            mu, std = self.policy_net(state)
-            action_dist = torch.distributions.Normal(mu, std)
-            log_prob = action_dist.log_prob(action).sum(dim=1, keepdim=True)
-            G = self.gamma * G + reward
-            loss = -log_prob * G  # 每一步的损失函数
-            loss.backward()  # 反向传播计算梯度
-        self.optimizer.step()  # 梯度下降
+#         G = 0
+#         self.optimizer.zero_grad()
+#         for i in reversed(range(len(reward_list))):  # 从最后一步算起
+#             reward = reward_list[i]
+#             state = torch.tensor([state_list[i]],
+#                                  dtype=torch.float).to(self.device)
+#             action = torch.tensor([action_list[i]]).to(self.device)
+#             mu, std = self.policy_net(state)
+#             action_dist = torch.distributions.Normal(mu, std)
+#             log_prob = action_dist.log_prob(action).sum(dim=1, keepdim=True)
+#             G = self.gamma * G + reward
+#             loss = -log_prob * G  # 每一步的损失函数
+#             loss.backward()  # 反向传播计算梯度
+#         self.optimizer.step()  # 梯度下降
 
-        return loss.item(), loss.item()
+#         return loss.item(), loss.item()

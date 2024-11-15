@@ -1,5 +1,5 @@
 from env import Env
-from my_algorithm import myPPOAlgorithm, myREINFORCEAlgorithm
+from my_algorithm import myPPOAlgorithm
 from team_algorithm import PPOAlgorithm, MyCustomAlgorithm
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -42,13 +42,15 @@ def main(algorithm, num_episodes, config, is_log):
     total_score_list = []
     score100_best = 0
     total_reward_list = []
+    total_obstacle_list = []
 
-    for i in range(20):
-        with tqdm(total=int(num_episodes/20), desc='Iteration %d' % i) as pbar:
-            for i_episode in range(int(num_episodes/20)):
-                epoch = num_episodes / 20 * i + i_episode + 1
+    for i in range(int(num_episodes/100)):
+        with tqdm(total=100, desc='Iteration %d' % i) as pbar:
+            for i_episode in range(100):
+                epoch = 100 * i + i_episode + 1
                 score = 0
                 total_reward = 0
+                total_obstacle = 0
                 done = False
                 transition_dict = {'states': [], 'actions': [], 'next_states': [], 'rewards': [], 'dones': []}
                 state = algorithm.preprocess_state(env.reset()[0])
@@ -61,31 +63,34 @@ def main(algorithm, num_episodes, config, is_log):
                     new_state = algorithm.preprocess_state(env.get_observation()[0])
                     done = env.terminated
                     reward = reward_algorithm.reward_total_8_1_1(env.get_dis(), pre_dist, env.is_obstacle_contact())
-                    if is_log:
-                        env_step_log(env, action, reward, env.is_obstacle_contact())
-                    total_reward += reward
-                    score += env.success_reward
-                    pre_dist = env.get_dis()
                     transition_dict['states'].append(state)
                     transition_dict['actions'].append(action)
                     transition_dict['next_states'].append(new_state)
                     transition_dict['rewards'].append(reward)
                     transition_dict['dones'].append(done)
+                    total_reward += reward
+                    score += env.success_reward
+                    pre_dist = env.get_dis()
+                    state = new_state
+                    if is_log:
+                        env_step_log(env, action, reward, env.is_obstacle_contact())
 
-                    # if (env.is_obstacle_contact()):
-                    #     break
+                    if (env.is_obstacle_contact()):
+                        total_obstacle += 1
+                        # break
                 
                 for key in replay_buffer.keys():
                     replay_buffer[key].extend(transition_dict[key])
 
                 total_reward_list.append(total_reward)
                 total_score_list.append(score)
+                total_obstacle_list.append(total_obstacle)
                 actor_loss = 0
                 critic_loss = 0
                 if len(replay_buffer['states']) >= replay_buffer_size*100:
                     batch = {k: list(replay_buffer[k]) for k in replay_buffer.keys()}
                     actor_loss, critic_loss = algorithm.update(batch)
-                print(f"Train_{i} completed. steps:", env.step_num, "Distance:", env.get_dis(), "Score:", score, "Reward:", total_reward, "Actor Loss:", actor_loss, "Critic Loss:", critic_loss)
+                print(f"Train_{i} completed. steps:", env.step_num, "Distance:", env.get_dis(), "Score:", score, "Reward:", total_reward, "n_Obstacle: ", total_obstacle, "Actor Loss:", actor_loss, "Critic Loss:", critic_loss)
 
                 # Tensorboard logging
                 if is_log:
@@ -94,6 +99,7 @@ def main(algorithm, num_episodes, config, is_log):
                     writer.add_scalar('Total Reward', total_reward, epoch)
                     writer.add_scalar('Score', score, epoch)
                     writer.add_scalar('End Distance', env.get_dis(), epoch)
+                    writer.add_scalar('Obstacle Contact Num', total_obstacle, epoch)
 
                     # model saving
                     torch.save(algorithm.actor.state_dict(), os.path.join(os.path.dirname(__file__), 'model.pth'))  # 放个在工程根目录下方便test.py测试
@@ -109,28 +115,23 @@ def main(algorithm, num_episodes, config, is_log):
                     if (epoch == 1):
                         torch.save(algorithm.actor.state_dict(), os.path.join(output_dir, 'actor_init.pth'))    # 由于随机性，保存一下初始权重，提供预训练模型
                         torch.save(algorithm.critic.state_dict(), os.path.join(output_dir, 'critic_init.pth'))
-                    elif (epoch == 1000):
-                        torch.save(algorithm.actor.state_dict(), os.path.join(output_dir, 'actor_1000.pth'))
-                        torch.save(algorithm.critic.state_dict(), os.path.join(output_dir, 'critic_1000.pth'))
-                    elif (epoch == 1500):
-                        torch.save(algorithm.actor.state_dict(), os.path.join(output_dir, 'actor_1500.pth'))
-                        torch.save(algorithm.critic.state_dict(), os.path.join(output_dir, 'critic_1500.pth'))
 
-                    display_reward = 0
+                    display_reward = total_reward
                     display_score = 0
-                    if epoch % (num_episodes/20) == 0:
-                        display_reward = np.mean(total_reward_list[-int(num_episodes/20):])
-                    else:
-                        display_reward = total_reward
+                    display_obstacle = 0
                     if (epoch >= 100):
+                        display_reward = np.mean(total_reward_list[-100:])
                         display_score = np.mean(total_score_list[-100:])
+                        display_obstacle = np.mean(total_obstacle_list[-100:])
                     pbar.set_postfix({
                         'episode':
                         '%d' % (epoch),
                         'return':
                         '%.3f' % display_reward,
                         'score':
-                        '%.3f' % display_score
+                        '%.3f' % display_score,
+                        'obstacle':
+                        '%.3f' % display_obstacle,
                     })
                     sys.stdout = sys.__stdout__
                     pbar.update(1)
@@ -155,7 +156,7 @@ if __name__ == "__main__":
     state_dim=config["state_dim"],
     actor_hidden_dim=config["actor_hidden_dim"],
     critic_hidden_dim=config["critic_hidden_dim"],
-    action_dim=config["action_dim"],
+    actor_dim=config["action_dim"],
     actor_lr=config["actor_lr"],
     critic_lr=config["critic_lr"],
     lmbda=config["lmbda"],
