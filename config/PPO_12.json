@@ -1,7 +1,7 @@
 {
     "config_name": "PPO-12",
-    "actor_lr": 1e-5,
-    "critic_lr": 4e-5,
+    "actor_lr": 2e-5,
+    "critic_lr": 1e-4,
     "num_episodes": 2000,
     "state_dim": 12,
     "actor_hidden_dim": 64,
@@ -9,7 +9,7 @@
     "action_dim": 6,
     "num_actor_hidden_layers": 8,
     "num_critic_hidden_layers": 8,
-    "gamma": 0.98,
+    "gamma": 0.99,
     "lmbda": 0.95,
     "residual_strength": 0.2,
     "num_heads": 8,

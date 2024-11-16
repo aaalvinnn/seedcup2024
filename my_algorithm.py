@@ -229,6 +229,25 @@ class myPPOAlgorithm:
             self.arrival_reward_flag = True
 
         return reward
+    def reward_total_9_2(self, dist, pre_dist, obstacle_contact, step):
+        reward = 0
+        # 1. 鼓励机械臂向目标物体前进
+        delta = (dist - pre_dist)
+        reward -= delta * 800
+
+        # 2. 移动时碰到障碍物
+        if obstacle_contact:
+            reward -= 8
+            self.is_obstacled = True
+
+        # 3. 到达奖励
+        if (not self.arrival_reward_flag) and (step >= self.env_max_steps or dist < 0.05):
+            reward -= (dist - 0.1) * 100
+            if self.is_obstacled:
+                reward -= 50
+            self.arrival_reward_flag = True
+
+        return reward
 
     def preprocess_state(self, state):
         return state

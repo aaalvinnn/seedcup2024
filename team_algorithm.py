@@ -114,7 +114,7 @@ class MyCustomAlgorithm(BaseAlgorithm):
         self.state_dim = 12
         self.hidden_dim = 128
         self.action_dim = 6
-        self.actor = PolicyNet(self.state_dim, self.hidden_dim, self.action_dim, 4, 0)
+        self.actor = PolicyNet(self.state_dim, self.hidden_dim, self.action_dim, 5, 0)
         model_path = os.path.join(os.path.dirname(__file__), "model_best.pth")
         self.actor.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
         pass

@@ -65,7 +65,7 @@ def main(algorithm: myPPOAlgorithm, num_episodes, config, is_log):
                     new_state = algorithm.preprocess_state(env.get_observation()[0])
                     done = env.terminated
                     # reward = reward_algorithm.reward_total_8_1_1(env.get_dis(), pre_dist, env.is_obstacle_contact(), env.get_step_now())
-                    reward = algorithm.reward_total_9_1(env.get_dis(), pre_dist, env.is_obstacle_contact(), env.get_step_now())
+                    reward = algorithm.reward_total_9_2(env.get_dis(), pre_dist, env.is_obstacle_contact(), env.get_step_now())
                     transition_dict['states'].append(state)
                     transition_dict['actions'].append(action)
                     transition_dict['next_states'].append(new_state)
@@ -119,6 +119,9 @@ def main(algorithm: myPPOAlgorithm, num_episodes, config, is_log):
                     if (epoch == 1):
                         torch.save(algorithm.actor.state_dict(), os.path.join(output_dir, 'actor_init.pth'))    # 由于随机性，保存一下初始权重，提供预训练模型
                         torch.save(algorithm.critic.state_dict(), os.path.join(output_dir, 'critic_init.pth'))
+                    elif (epoch == 500):
+                        torch.save(algorithm.actor.state_dict(), os.path.join(output_dir, 'actor_500.pth'))
+                        torch.save(algorithm.critic.state_dict(), os.path.join(output_dir, 'critic_500.pth'))
 
                     display_reward = total_reward_list[-1]
                     display_score = total_score_list[-1]
