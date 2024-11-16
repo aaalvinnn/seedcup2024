@@ -46,7 +46,7 @@ class Env:
 
         self.obstacle1_position = [np.random.uniform(-0.2, 0.2, 1) + self.goalx[0], 0.6, np.random.uniform(0.1, 0.3, 1)]
         self.p.resetBasePositionAndOrientation(self.obstacle1, self.obstacle1_position, [0, 0, 0, 1])
-        for _ in range(self.max_steps):
+        for _ in range(100):
             self.p.stepSimulation()
 
         return self.get_observation()
@@ -69,11 +69,13 @@ class Env:
         fr5_joint_angles = np.array(joint_angles) + (np.array(action[:6]) / 180 * np.pi)
         gripper = np.array([0, 0])
         angle_now = np.hstack([fr5_joint_angles, gripper])
-        self.reward()
+        # self.reward()
         self.p.setJointMotorControlArray(self.fr5, [1, 2, 3, 4, 5, 6, 8, 9], p.POSITION_CONTROL, targetPositions=angle_now)
 
         for _ in range(20):
             self.p.stepSimulation()
+
+        self.reward()
 
         return self.observation
 
@@ -98,6 +100,7 @@ class Env:
 
         # 计算奖励
         if self.get_dis() < 0.05 and self.step_num <= self.max_steps:
+            dist = self.get_dis()
             self.success_reward = 100
             if self.obstacle_contact:
                 if self.is_senior:
@@ -130,6 +133,7 @@ class Env:
     def close(self):
         self.p.disconnect()
 
+    # 以下为暴露给train.py的接口
     def is_obstacle_contact(self):
         """
         判断是否接触到障碍物，在不修改env.py的情况下，作为接口供train.py使用
@@ -144,3 +148,6 @@ class Env:
                 return True
             
         return False
+    
+    def get_step_now(self):
+        return self.step_num
