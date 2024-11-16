@@ -130,7 +130,7 @@ def reward_total_8_1(dist, pre_dist, obstacle_contact):
 
     return reward
 
-def reward_total_8_1_1(dist, pre_dist, obstacle_contact):
+def reward_total_8_1_1(dist, pre_dist, obstacle_contact, step=None):
     reward = 1 - (dist - 0.3) * 20
 
     # 考虑delta dist (about 0.005m)
@@ -138,7 +138,7 @@ def reward_total_8_1_1(dist, pre_dist, obstacle_contact):
     reward -= delta * 60
     # obstacle
     if obstacle_contact:
-        reward -= 1.5
+        reward -= 3
     # # success
     # if dist <= 0.2:
     #     reward += 3

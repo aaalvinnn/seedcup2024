@@ -1,8 +1,8 @@
 {
     "config_name": "PPO-13",
-    "actor_lr": 4e-6,
+    "actor_lr": 1e-5,
     "critic_lr": 2e-5,
-    "num_episodes": 1000,
+    "num_episodes": 2000,
     "state_dim": 12,
     "actor_hidden_dim": 64,
     "critic_hidden_dim": 64,
@@ -14,6 +14,5 @@
     "residual_strength": 0,
     "epochs": 15,
     "eps": 0.2,
-    "actor_pretrained_model": "modelscore30.pth",
-    "critic_pretrained_model": "output/1115/1128_PPO-13/critic.pth"
+    "actor_pretrained_model": "pretrained_models/PPO-13/model.pth"
 }

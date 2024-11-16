@@ -1,5 +1,6 @@
 from env import Env
 from team_algorithm import PPOAlgorithm, MyCustomAlgorithm
+import time
 
 def main(algorithm):
     env = Env(is_senior=True,seed=100,gui=False)
@@ -42,4 +43,8 @@ def main(algorithm):
 if __name__ == "__main__":
     # algorithm = PPOAlgorithm()
     algorithm = MyCustomAlgorithm()
+    start_time = time.time()
     main(algorithm)
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Total time taken: {elapsed_time:.2f} seconds")  # 打印总耗时

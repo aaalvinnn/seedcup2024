@@ -4,6 +4,10 @@ import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 
+# *******************REWARD********************************
+from reward_algorithm import *  # v1~v8
+# v9: 作为类成员函数，这里reward定义为全局变量，以反映全局策略。见下myPPOAlgorithm类
+
 # PPO compute advantage funciton
 def compute_advantage(gamma, lmbda, td_delta):
     td_delta = td_delta.detach().numpy()
@@ -154,14 +158,77 @@ class myPPOAlgorithm:
             pass
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
-        self.actor_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.actor_optimizer, T_max=nums_episodes, eta_min=actor_lr/10)
-        self.critic_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_optimizer, T_max=nums_episodes, eta_min=critic_lr/10)
+        self.actor_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.actor_optimizer, T_max=nums_episodes, eta_min=actor_lr/20)
+        self.critic_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_optimizer, T_max=nums_episodes, eta_min=critic_lr/20)
         self.gamma = gamma
         self.lmbda = lmbda
         self.epochs = epochs
         self.eps = eps
         self.device = device
         self.isTrain = isTrain
+        # 与env相关的变量
+        self.env_max_steps = 100
+        self.is_obstacled = False
+        self.arrival_reward_flag = False
+        self.reward = 0
+
+    def reset(self):
+        self.is_obstacled = False
+        self.arrival_reward_flag = False
+    # 全局奖励
+    def reward_total_9(self, dist, pre_dist, obstacle_contact, step):
+        # 1. 鼓励机械臂向目标物体前进
+        delta = (dist - pre_dist)
+        self.reward -= delta * 500
+
+        # 2. 移动时碰到障碍物
+        if obstacle_contact:
+            self.reward -= 3
+            self.is_obstacled = True
+
+        # 3. 到达奖励
+        if dist < 0.05 and step <= self.env_max_steps:
+            self.reward += 100
+            if self.is_obstacled:
+                self.reward -= 50
+        elif step >= self.env_max_steps:
+            self.reward -= (dist - 0.05) * 100
+            if self.is_obstacled:
+                self.reward -= 50
+
+        return self.reward
+    
+    # 局部奖励
+    def reward_total_9_1(self, dist, pre_dist, obstacle_contact, step):
+        reward = 0
+        # 1. 鼓励机械臂向目标物体前进
+        delta = (dist - pre_dist)
+        reward -= delta * 600
+
+        # 2. 移动时碰到障碍物
+        if obstacle_contact:
+            reward -= 5
+            self.is_obstacled = True
+
+        # 3. 到达奖励
+        # if dist < 0.05 and step <= self.env_max_steps:
+        #     reward += 100
+        #     if self.is_obstacled:
+        #         reward -= 30
+        # elif step >= self.env_max_steps:
+        #     reward -= (dist - 0.05) * 100
+        #     if self.is_obstacled:
+        #         reward -= 30
+        if (not self.arrival_reward_flag) and (step >= self.env_max_steps or dist < 0.05):
+            if dist < 0.05:
+                # debug
+                pass
+            reward -= (dist - 0.1) * 100
+            if self.is_obstacled:
+                reward -= 30
+            self.arrival_reward_flag = True
+
+        return reward
 
     def preprocess_state(self, state):
         return state
@@ -196,6 +263,7 @@ class myPPOAlgorithm:
             return np.array(action.squeeze(0).tolist())  # 6 维度的动作
 
     def update(self, transition_dict):
+        self.reward = 0
         self.actor.train()
         states = torch.tensor(transition_dict['states'],
                               dtype=torch.float).to(self.device)
@@ -239,42 +307,3 @@ class myPPOAlgorithm:
         self.actor_scheduler.step()
         self.critic_scheduler.step()
         return actor_loss.item(), critic_loss.item()
-    
-# class myREINFORCEAlgorithm:
-#     def __init__(self, state_dim, hidden_dim, action_dim, learning_rate, gamma,
-#                  device):
-#         self.policy_net = PolicyNet(state_dim, hidden_dim,
-#                                     action_dim).to(device)
-#         self.optimizer = torch.optim.Adam(self.policy_net.parameters(),
-#                                           lr=learning_rate)  # 使用Adam优化器
-#         self.gamma = gamma  # 折扣因子
-#         self.device = device
-
-#     def get_action(self, state):  # 根据动作概率分布随机采样
-#         state = torch.tensor([state], dtype=torch.float).to(self.device)
-#         mu, sigma = self.policy_net(state)
-#         action_dist = torch.distributions.Normal(mu, sigma)
-#         action = action_dist.sample()
-#         return action.squeeze(0).tolist()   # 6 dimensional action
-
-#     def update(self, transition_dict):
-#         reward_list = transition_dict['rewards']
-#         state_list = transition_dict['states']
-#         action_list = transition_dict['actions']
-
-#         G = 0
-#         self.optimizer.zero_grad()
-#         for i in reversed(range(len(reward_list))):  # 从最后一步算起
-#             reward = reward_list[i]
-#             state = torch.tensor([state_list[i]],
-#                                  dtype=torch.float).to(self.device)
-#             action = torch.tensor([action_list[i]]).to(self.device)
-#             mu, std = self.policy_net(state)
-#             action_dist = torch.distributions.Normal(mu, std)
-#             log_prob = action_dist.log_prob(action).sum(dim=1, keepdim=True)
-#             G = self.gamma * G + reward
-#             loss = -log_prob * G  # 每一步的损失函数
-#             loss.backward()  # 反向传播计算梯度
-#         self.optimizer.step()  # 梯度下降
-
-#         return loss.item(), loss.item()

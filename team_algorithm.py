@@ -112,7 +112,7 @@ class PolicyNet(torch.nn.Module):
 class MyCustomAlgorithm(BaseAlgorithm):
     def __init__(self):
         self.state_dim = 12
-        self.hidden_dim = 64
+        self.hidden_dim = 128
         self.action_dim = 6
         self.actor = PolicyNet(self.state_dim, self.hidden_dim, self.action_dim, 4, 0)
         model_path = os.path.join(os.path.dirname(__file__), "model_best.pth")
@@ -145,7 +145,7 @@ class MyCustomAlgorithm(BaseAlgorithm):
 # 示例：使用PPO预训练模型
 class PPOAlgorithm(BaseAlgorithm):
     def __init__(self):
-        self.model = PPO.load("model.zip", device="cpu")
+        self.model = PPO.load("ppo_stablebaselines3_env.zip", device="cpu")
 
     def get_action(self, observation):
         action, _ = self.model.predict(observation)

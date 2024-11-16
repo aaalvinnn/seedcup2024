@@ -12,7 +12,7 @@
             "console": "integratedTerminal",
             "args": [
                 // "${command:pickArgs}"
-                "--config_path", "config/PPO_13.json"
+                "--config_path", "config/PPO_15.json", "--log"
             ]
         }
     ]

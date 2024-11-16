@@ -25,7 +25,7 @@ def env_step_log(env: Env, action, reward, obstacle_contact):
     print(f"Step: {env.step_num}, dest_dist: {env.get_dis()}, is_Obstacle: {obstacle_contact}, Reward: {reward}")
         # State: {env.get_observation()[0]}\nAction: {action}\n")
 
-def main(algorithm, num_episodes, config, is_log):
+def main(algorithm: myPPOAlgorithm, num_episodes, config, is_log):
     if is_log:
         cur_time = datetime.now()
         output_fir_name = os.path.join("output", cur_time.strftime("%m%d"), cur_time.strftime("%H%M") + "_" + config)
@@ -43,10 +43,12 @@ def main(algorithm, num_episodes, config, is_log):
     score100_best = 0
     total_reward_list = []
     total_obstacle_list = []
+    total_dist_list = []
 
     for i in range(int(num_episodes/100)):
         with tqdm(total=100, desc='Iteration %d' % i) as pbar:
             for i_episode in range(100):
+                algorithm.reset()
                 epoch = 100 * i + i_episode + 1
                 score = 0
                 total_reward = 0
@@ -62,7 +64,8 @@ def main(algorithm, num_episodes, config, is_log):
                     _ = env.step(action)
                     new_state = algorithm.preprocess_state(env.get_observation()[0])
                     done = env.terminated
-                    reward = reward_algorithm.reward_total_8_1_1(env.get_dis(), pre_dist, env.is_obstacle_contact())
+                    # reward = reward_algorithm.reward_total_8_1_1(env.get_dis(), pre_dist, env.is_obstacle_contact(), env.get_step_now())
+                    reward = algorithm.reward_total_9_1(env.get_dis(), pre_dist, env.is_obstacle_contact(), env.get_step_now())
                     transition_dict['states'].append(state)
                     transition_dict['actions'].append(action)
                     transition_dict['next_states'].append(new_state)
@@ -85,6 +88,7 @@ def main(algorithm, num_episodes, config, is_log):
                 total_reward_list.append(total_reward)
                 total_score_list.append(score)
                 total_obstacle_list.append(total_obstacle)
+                total_dist_list.append(env.get_dis())
                 actor_loss = 0
                 critic_loss = 0
                 if len(replay_buffer['states']) >= replay_buffer_size*100:
@@ -116,13 +120,15 @@ def main(algorithm, num_episodes, config, is_log):
                         torch.save(algorithm.actor.state_dict(), os.path.join(output_dir, 'actor_init.pth'))    # 由于随机性，保存一下初始权重，提供预训练模型
                         torch.save(algorithm.critic.state_dict(), os.path.join(output_dir, 'critic_init.pth'))
 
-                    display_reward = total_reward
-                    display_score = 0
-                    display_obstacle = 0
+                    display_reward = total_reward_list[-1]
+                    display_score = total_score_list[-1]
+                    display_obstacle = total_obstacle_list[-1]
+                    display_dist = env.get_dis()
                     if (epoch >= 100):
                         display_reward = np.mean(total_reward_list[-100:])
                         display_score = np.mean(total_score_list[-100:])
                         display_obstacle = np.mean(total_obstacle_list[-100:])
+                        display_dist = np.mean(total_dist_list[-100:])
                     pbar.set_postfix({
                         'episode':
                         '%d' % (epoch),
@@ -132,6 +138,8 @@ def main(algorithm, num_episodes, config, is_log):
                         '%.3f' % display_score,
                         'obstacle':
                         '%.3f' % display_obstacle,
+                        'dist':
+                        '%.3f' % display_dist
                     })
                     sys.stdout = sys.__stdout__
                     pbar.update(1)
