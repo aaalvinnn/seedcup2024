@@ -1,12 +1,11 @@
 {
-    "config_name": "PPO-16",
-    "algorithm": "PPO",
+    "config_name": "PPO-15_1_selfAttention",
     "actor_lr": 2e-5,
     "critic_lr": 5e-5,
     "num_episodes": 3000,
     "state_dim": 12,
-    "actor_hidden_dim": 256,
-    "critic_hidden_dim": 256,
+    "actor_hidden_dim": 128,
+    "critic_hidden_dim": 128,
     "action_dim": 6,
     "num_actor_hidden_layers": 5,
     "num_critic_hidden_layers": 5,
@@ -15,6 +14,6 @@
     "residual_strength": 0,
     "epochs": 15,
     "eps": 0.2,
-
-    "_score": "about 10~20 after 2000 episode"
+    "//": "output/1117/1630_PPO-15_1/actor.pth",
+    "//": "output/1117/1630_PPO-15_1/critic.pth"
 }

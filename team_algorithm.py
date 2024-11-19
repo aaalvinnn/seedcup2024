@@ -62,7 +62,7 @@ class PolicyNet(torch.nn.Module):
         for i, layer in enumerate(self.layers):
             residual = self.residual_strength * x
             x = F.leaky_relu(layer(x))
-            if (x.shape == residual.shape) and (i % 2):
+            if (x.shape == residual.shape):
                 x = x + residual  # 添加残差
 
         mu = torch.tanh(self.fc_mu(x))
@@ -117,6 +117,7 @@ class MyCustomAlgorithm(BaseAlgorithm):
         self.actor = PolicyNet(self.state_dim, self.hidden_dim, self.action_dim, 5, 0)
         model_path = os.path.join(os.path.dirname(__file__), "model_best.pth")
         self.actor.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
+        self.actor.eval()
         pass
     
     def preprocess_state(self, state):
@@ -135,7 +136,6 @@ class MyCustomAlgorithm(BaseAlgorithm):
         return np.concatenate([jixiebi_state, [dest_stateX], [dest_stateY], [dest_stateZ], [obstacle_stateX], [obstacle_stateY], [obstacle_stateZ]])
     
     def get_action(self, observation):
-        self.actor.eval()
         state = torch.tensor([observation[0]], dtype=torch.float)
         mu, sigma = self.actor(state)
         action_dist = torch.distributions.Normal(mu, sigma)

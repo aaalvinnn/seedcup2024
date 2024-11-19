@@ -1,5 +1,6 @@
 from env import Env
 from my_algorithm import myPPOAlgorithm
+from my_algorithm_SAC import mySACAlgorithm
 from team_algorithm import PPOAlgorithm, MyCustomAlgorithm
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -12,6 +13,25 @@ import json
 import argparse
 import collections
 import reward_algorithm
+import random
+import csv
+
+device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
+class ReplayBuffer:
+    def __init__(self, capacity):
+        self.buffer = collections.deque(maxlen=capacity) 
+
+    def add(self, state, action, reward, next_state, done): 
+        self.buffer.append((state, action, reward, next_state, done)) 
+
+    def sample(self, batch_size): 
+        transitions = random.sample(self.buffer, batch_size)
+        state, action, reward, next_state, done = zip(*transitions)
+        return np.array(state), action, reward, np.array(next_state), done 
+
+    def size(self): 
+        return len(self.buffer)
 
 # 定义经验重放队列，PPO不需要经验重放
 replay_buffer_size = 1#(*100)
@@ -25,7 +45,10 @@ def env_step_log(env: Env, action, reward, obstacle_contact):
     print(f"Step: {env.step_num}, dest_dist: {env.get_dis()}, is_Obstacle: {obstacle_contact}, Reward: {reward}")
         # State: {env.get_observation()[0]}\nAction: {action}\n")
 
-def main(algorithm: myPPOAlgorithm, num_episodes, config, is_log):
+
+def train_offline_policy_agent(algorithm: mySACAlgorithm, num_episodes, replay_buffer_size, minimal_size, batch_size, config, is_log):
+    replay_buffer = ReplayBuffer(replay_buffer_size)
+    
     if is_log:
         cur_time = datetime.now()
         output_fir_name = os.path.join("output", cur_time.strftime("%m%d"), cur_time.strftime("%H%M") + "_" + config)
@@ -48,7 +71,7 @@ def main(algorithm: myPPOAlgorithm, num_episodes, config, is_log):
     for i in range(int(num_episodes/100)):
         with tqdm(total=100, desc='Iteration %d' % i) as pbar:
             for i_episode in range(100):
-                algorithm.reset()
+                algorithm.reset(env.reset()[0])
                 epoch = 100 * i + i_episode + 1
                 score = 0
                 total_reward = 0
@@ -65,63 +88,54 @@ def main(algorithm: myPPOAlgorithm, num_episodes, config, is_log):
                     new_state = algorithm.preprocess_state(env.get_observation()[0])
                     done = env.terminated
                     # reward = reward_algorithm.reward_total_8_1_1(env.get_dis(), pre_dist, env.is_obstacle_contact(), env.get_step_now())
-                    reward = algorithm.reward_total_9_2(env.get_dis(), pre_dist, env.is_obstacle_contact(), env.get_step_now())
-                    transition_dict['states'].append(state)
-                    transition_dict['actions'].append(action)
-                    transition_dict['next_states'].append(new_state)
-                    transition_dict['rewards'].append(reward)
-                    transition_dict['dones'].append(done)
+                    reward = algorithm.reward_total_11_1(env.get_dis(), pre_dist, env.is_obstacle_contact(), total_obstacle, env.get_step_now(), env.get_score())
+                    replay_buffer.add(state, action, reward, new_state, done)
                     total_reward += reward
                     score += env.success_reward
                     pre_dist = env.get_dis()
                     state = new_state
+                    if replay_buffer.size() > minimal_size:
+                        b_s, b_a, b_r, b_ns, b_d = replay_buffer.sample(batch_size)
+                        transition_dict = {'states': b_s, 'actions': b_a, 'next_states': b_ns, 'rewards': b_r, 'dones': b_d}
+                        algorithm.update(transition_dict)
+
                     if is_log:
                         env_step_log(env, action, reward, env.is_obstacle_contact())
 
                     if (env.is_obstacle_contact()):
                         total_obstacle += 1
                         # break
-                
-                for key in replay_buffer.keys():
-                    replay_buffer[key].extend(transition_dict[key])
 
                 total_reward_list.append(total_reward)
                 total_score_list.append(score)
                 total_obstacle_list.append(total_obstacle)
                 total_dist_list.append(env.get_dis())
-                actor_loss = 0
-                critic_loss = 0
-                if len(replay_buffer['states']) >= replay_buffer_size*100:
-                    batch = {k: list(replay_buffer[k]) for k in replay_buffer.keys()}
-                    actor_loss, critic_loss = algorithm.update(batch)
-                print(f"Train_{i} completed. steps:", env.step_num, "Distance:", env.get_dis(), "Score:", score, "Reward:", total_reward, "n_Obstacle: ", total_obstacle, "Actor Loss:", actor_loss, "Critic Loss:", critic_loss)
+                print(f"Train_{epoch} completed. steps:", env.step_num, "Distance:", env.get_dis(), "Score:", score, "Reward:", total_reward, "n_Obstacle: ", total_obstacle)
 
                 # Tensorboard logging
                 if is_log:
-                    writer.add_scalar('Actor Loss', actor_loss, epoch)
-                    writer.add_scalar('Critic Loss', critic_loss, epoch)
                     writer.add_scalar('Total Reward', total_reward, epoch)
                     writer.add_scalar('Score', score, epoch)
                     writer.add_scalar('End Distance', env.get_dis(), epoch)
                     writer.add_scalar('Obstacle Contact Num', total_obstacle, epoch)
 
                     # model saving
-                    torch.save(algorithm.actor.state_dict(), os.path.join(os.path.dirname(__file__), 'model.pth'))  # 放个在工程根目录下方便test.py测试
+                    # torch.save(algorithm.actor.state_dict(), os.path.join(os.path.dirname(__file__), 'model.pth'))  # 放个在工程根目录下方便test.py测试
                     torch.save(algorithm.actor.state_dict(), os.path.join(output_dir, 'actor.pth'))
-                    torch.save(algorithm.critic.state_dict(), os.path.join(output_dir, 'critic.pth'))
+                    torch.save(algorithm.critic_1.state_dict(), os.path.join(output_dir, 'critic_1.pth'))
+                    torch.save(algorithm.critic_2.state_dict(), os.path.join(output_dir, 'critic_2.pth'))
 
                     if (epoch>=100):
                         score100_best = np.mean(total_score_list[-100:]) if np.mean(total_score_list[-100:]) > score100_best else score100_best
                         if (score100_best <= np.mean(total_score_list[-100:])):
                             torch.save(algorithm.actor.state_dict(), os.path.join(output_dir, 'actor_best.pth'))
-                            torch.save(algorithm.critic.state_dict(), os.path.join(output_dir, 'critic_best.pth'))
-                            torch.save(algorithm.actor.state_dict(), os.path.join(os.path.dirname(__file__), 'model_best.pth'))  # 放个在工程根目录下方便test.py测试
+                            torch.save(algorithm.critic_1.state_dict(), os.path.join(output_dir, 'critic_1_best.pth'))
+                            torch.save(algorithm.critic_2.state_dict(), os.path.join(output_dir, 'critic_2_best.pth'))
+                            # torch.save(algorithm.actor.state_dict(), os.path.join(os.path.dirname(__file__), 'model_best.pth'))  # 放个在工程根目录下方便test.py测试
                     if (epoch == 1):
                         torch.save(algorithm.actor.state_dict(), os.path.join(output_dir, 'actor_init.pth'))    # 由于随机性，保存一下初始权重，提供预训练模型
-                        torch.save(algorithm.critic.state_dict(), os.path.join(output_dir, 'critic_init.pth'))
-                    elif (epoch == 500):
-                        torch.save(algorithm.actor.state_dict(), os.path.join(output_dir, 'actor_500.pth'))
-                        torch.save(algorithm.critic.state_dict(), os.path.join(output_dir, 'critic_500.pth'))
+                        torch.save(algorithm.critic_1.state_dict(), os.path.join(output_dir, 'critic_1_init.pth'))
+                        torch.save(algorithm.critic_2.state_dict(), os.path.join(output_dir, 'critic_2_init.pth'))
 
                     display_reward = total_reward_list[-1]
                     display_score = total_score_list[-1]
@@ -150,37 +164,222 @@ def main(algorithm: myPPOAlgorithm, num_episodes, config, is_log):
         
 
     env.close()
+    # 返回最佳test得分，平均总得分，平均奖励回报，平均碰到障碍次数，平均结束距离
+    return score100_best, sum(total_score_list)/len(total_score_list), sum(total_reward_list)/len(total_reward_list), sum(total_obstacle_list)/len(total_obstacle_list), sum(total_dist_list)/len(total_dist_list)
+
+def train_online_policy_agent(algorithm: myPPOAlgorithm, num_episodes, config, is_log):
+    if is_log:
+        cur_time = datetime.now()
+        output_fir_name = os.path.join("output", cur_time.strftime("%m%d"), cur_time.strftime("%H%M") + "_" + config)
+        output_dir = os.path.join(os.path.dirname(__file__), output_fir_name)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
+        writer = SummaryWriter(os.path.join(output_dir, 'SummaryWriter'))
+        log_file = open(os.path.join(output_dir, 'log.txt'), 'w+')
+        sys.stdout = log_file
+
+    env = Env(is_senior=True,seed=100,gui=False)
+    done = False
+    total_score_list = []
+    score100_best = 0
+    total_reward_list = []
+    total_obstacle_list = []
+    total_dist_list = []
+
+    for i in range(int(num_episodes/100)):
+        with tqdm(total=100, desc='Iteration %d' % i) as pbar:
+            for i_episode in range(100):
+                algorithm.reset(env.reset()[0])
+                epoch = 100 * i + i_episode + 1
+                score = 0
+                total_reward = 0
+                total_obstacle = 0
+                done = False
+                transition_dict = {'states': [], 'actions': [], 'next_states': [], 'rewards': [], 'dones': []}
+                state = algorithm.preprocess_state(env.reset()[0])
+                pre_dist = env.get_dis()
+
+                print(f"******** Episode:", epoch, "*******")
+                while not done:
+                    action = algorithm.get_action(state)
+                    _ = env.step(action)
+                    new_state = algorithm.preprocess_state(env.get_observation()[0])
+                    done = env.terminated
+                    # reward = reward_algorithm.reward_total_8_1_1(env.get_dis(), pre_dist, env.is_obstacle_contact(), env.get_step_now())
+                    reward = algorithm.reward_total_11_2(env.get_dis(), pre_dist, env.is_obstacle_contact(), total_obstacle, env.get_step_now(), env.get_score())
+                    transition_dict['states'].append(state)
+                    transition_dict['actions'].append(action)
+                    transition_dict['next_states'].append(new_state)
+                    transition_dict['rewards'].append(reward)
+                    transition_dict['dones'].append(done)
+                    total_reward += reward
+                    score += env.success_reward
+                    pre_dist = env.get_dis()
+                    state = new_state
+                    if is_log:
+                        env_step_log(env, action, reward, env.is_obstacle_contact())
+
+                    if (env.is_obstacle_contact()):
+                        total_obstacle += 1
+                        # break
+                
+                for key in replay_buffer.keys():
+                    replay_buffer[key].extend(transition_dict[key])
+
+                total_reward_list.append(total_reward)
+                total_score_list.append(score)
+                total_obstacle_list.append(total_obstacle)
+                total_dist_list.append(env.get_dis())
+                actor_loss = 0
+                critic_loss = 0
+                if len(replay_buffer['states']) >= replay_buffer_size*100:
+                    batch = {k: list(replay_buffer[k]) for k in replay_buffer.keys()}
+                    actor_loss, critic_loss = algorithm.update(batch)
+                print(f"Train_{epoch} completed. steps:", env.step_num, "Distance:", env.get_dis(), "Score:", score, "Reward:", total_reward, "n_Obstacle: ", total_obstacle, "Actor Loss:", actor_loss, "Critic Loss:", critic_loss)
+
+                # Tensorboard logging
+                if is_log:
+                    writer.add_scalar('Actor Loss', actor_loss, epoch)
+                    writer.add_scalar('Critic Loss', critic_loss, epoch)
+                    writer.add_scalar('Total Reward', total_reward, epoch)
+                    writer.add_scalar('Score', score, epoch)
+                    writer.add_scalar('End Distance', env.get_dis(), epoch)
+                    writer.add_scalar('Obstacle Contact Num', total_obstacle, epoch)
+
+                    # model saving
+                    # torch.save(algorithm.actor.state_dict(), os.path.join(os.path.dirname(__file__), 'model.pth'))  # 放个在工程根目录下方便test.py测试
+                    torch.save(algorithm.actor.state_dict(), os.path.join(output_dir, 'actor.pth'))
+                    torch.save(algorithm.critic.state_dict(), os.path.join(output_dir, 'critic.pth'))
+
+                    if (epoch>=100):
+                        score100_best = np.mean(total_score_list[-100:]) if np.mean(total_score_list[-100:]) > score100_best else score100_best
+                        if (score100_best <= np.mean(total_score_list[-100:])):
+                            torch.save(algorithm.actor.state_dict(), os.path.join(output_dir, 'actor_best.pth'))
+                            torch.save(algorithm.critic.state_dict(), os.path.join(output_dir, 'critic_best.pth'))
+                            # torch.save(algorithm.actor.state_dict(), os.path.join(os.path.dirname(__file__), 'model_best.pth'))  # 放个在工程根目录下方便test.py测试
+                    if (epoch == 1):
+                        torch.save(algorithm.actor.state_dict(), os.path.join(output_dir, 'actor_init.pth'))    # 由于随机性，保存一下初始权重，提供预训练模型
+                        torch.save(algorithm.critic.state_dict(), os.path.join(output_dir, 'critic_init.pth'))
+
+                    display_reward = total_reward_list[-1]
+                    display_score = total_score_list[-1]
+                    display_obstacle = total_obstacle_list[-1]
+                    display_dist = env.get_dis()
+                    if (epoch >= 100):
+                        display_reward = np.mean(total_reward_list[-100:])
+                        display_score = np.mean(total_score_list[-100:])
+                        display_obstacle = np.mean(total_obstacle_list[-100:])
+                        display_dist = np.mean(total_dist_list[-100:])
+                    pbar.set_postfix({
+                        'episode':
+                        '%d' % (epoch),
+                        'return':
+                        '%.3f' % display_reward,
+                        'score':
+                        '%.3f' % display_score,
+                        'obstacle':
+                        '%.3f' % display_obstacle,
+                        'dist':
+                        '%.3f' % display_dist
+                    })
+                    sys.stdout = sys.__stdout__
+                    pbar.update(1)
+                    sys.stdout = log_file
+        
+
+    env.close()
+    # 返回最佳test得分，平均总得分，平均奖励回报，平均碰到障碍次数，平均结束距离
+    return score100_best, sum(total_score_list)/len(total_score_list), sum(total_reward_list)/len(total_reward_list), sum(total_obstacle_list)/len(total_obstacle_list), sum(total_dist_list)/len(total_dist_list)
+
+def train_one_config(config_file_path, is_log):
+    with open(config_file_path, 'r') as j:
+        config = json.load(j)
+    
+    config_name = config["config_name"]
+    score100 = 0
+    mean_score = 0
+    mean_reward = 0
+    mean_obstacle = 0
+    mean_end_dist = 0
+    sys.stdout = sys.__stdout__
+    print(f"***************{datetime.now()} config: {config_name}\n***************")
+
+    if (config["algorithm"] == "PPO"):
+        algorithm = myPPOAlgorithm(
+            nums_episodes=config["num_episodes"],
+            state_dim=config["state_dim"],
+            actor_hidden_dim=config["actor_hidden_dim"],
+            critic_hidden_dim=config["critic_hidden_dim"],
+            action_dim=config["action_dim"],
+            actor_lr=config["actor_lr"],
+            critic_lr=config["critic_lr"],
+            lmbda=config["lmbda"],
+            epochs=config["epochs"],
+            eps=config["eps"],
+            gamma=config["gamma"],
+            residual_strength=config["residual_strength"],
+            device=device,
+            dropout=config.get("dropout"),
+            n_state_steps=config.get("n_state_steps"),
+            num_actor_hidden_layers=config["num_actor_hidden_layers"],
+            num_critic_hidden_layers=config["num_critic_hidden_layers"],
+            actor_pretrained_model=config.get("actor_pretrained_model"),
+            critic_pretrained_model=config.get("critic_pretrained_model"),
+            isTrain=True
+        )
+        score100, mean_score, mean_reward, mean_obstacle, mean_end_dist = train_online_policy_agent(algorithm, config["num_episodes"], config["config_name"], is_log)
+        
+    elif (config["algorithm"] == "SAC"):
+        algorithm = mySACAlgorithm(
+            nums_episodes=config["num_episodes"],
+            state_dim=config["state_dim"],
+            actor_hidden_dim=config["actor_hidden_dim"],
+            critic_hidden_dim=config["critic_hidden_dim"],
+            action_dim=config["action_dim"],
+            num_actor_hidden_layers=config["num_actor_hidden_layers"],
+            num_critic_hidden_layers=config["num_critic_hidden_layers"],
+            actor_lr=config["actor_lr"],
+            critic_lr=config["critic_lr"],
+            alpha_lr=config["alpha_lr"],
+            target_entropy=config["target_entropy"],
+            tau=config["tau"],
+            gamma=config["gamma"],
+            device=device
+        )
+        score100, mean_score, mean_reward, mean_obstacle, mean_end_dist = train_offline_policy_agent(algorithm=algorithm,
+            num_episodes=config["num_episodes"],
+            replay_buffer_size=config["buffer_size"],
+            minimal_size=config["minimal_size"],
+            batch_size=config["batch_size"],
+            config=config["config_name"],
+            is_log=is_log)
+        
+    return config_name, score100, mean_score, mean_reward, mean_obstacle, mean_end_dist, datetime.now()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Training parameters as follow: ")
     parser.add_argument('--config_path', type=str, required=True, help="Path to the JSON configuration file")
     parser.add_argument('--log', action='store_true', help="Enable logging")
+    parser.add_argument('--output_csv', type=str, required=True)
     args = parser.parse_args()
 
-    with open(args.config_path, 'r') as j:
-        config = json.load(j)
-    
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    with open(args.output_csv, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(['Config File', 'Score 100', 'Mean Score', 'Mean Reward', 'Mean Obstacle', 'Mean End Distance', 'Time'])
 
-    algorithm = myPPOAlgorithm(
-    nums_episodes=config["num_episodes"],
-    state_dim=config["state_dim"],
-    actor_hidden_dim=config["actor_hidden_dim"],
-    critic_hidden_dim=config["critic_hidden_dim"],
-    actor_dim=config["action_dim"],
-    actor_lr=config["actor_lr"],
-    critic_lr=config["critic_lr"],
-    lmbda=config["lmbda"],
-    epochs=config["epochs"],
-    eps=config["eps"],
-    gamma=config["gamma"],
-    residual_strength=config["residual_strength"],
-    device=device,
-    num_actor_hidden_layers=config["num_actor_hidden_layers"],
-    num_critic_hidden_layers=config["num_critic_hidden_layers"],
-    actor_pretrained_model=config.get("actor_pretrained_model"),
-    critic_pretrained_model=config.get("critic_pretrained_model"),
-    isTrain=True
-)
+        if os.path.isfile(args.config_path):
+            # 处理单个配置文件
+            config_name, score100, mean_score, mean_reward, mean_obstacle, mean_end_dist, time = train_one_config(args.config_path, args.log)
+            writer.writerow([config_name, score100, mean_score, mean_reward, mean_obstacle, mean_end_dist, time])
+        
+        elif os.path.isdir(args.config_path):
+            # 处理目录中的多个配置文件
+            config_files = [os.path.join(args.config_path, f) for f in os.listdir(args.config_path) if f.endswith('.json')]
+            for config_file in config_files:
+                config_name, score100, mean_score, mean_reward, mean_obstacle, mean_end_dist, time = train_one_config(config_file, args.log)
+                writer.writerow([config_name, score100, mean_score, mean_reward, mean_obstacle, mean_end_dist, time])
+
+    print(f"Results have been written to {args.output_csv}")
     
-    main(algorithm, config["num_episodes"], config["config_name"], args.log)

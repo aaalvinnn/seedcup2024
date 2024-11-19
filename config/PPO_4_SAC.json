@@ -1,0 +1,20 @@
+{
+    "config_name": "PPO-4_SAC",
+    "algorithm": "SAC",
+    "actor_lr": 1e-5,
+    "critic_lr": 5e-5,
+    "alpha_lr": 1e-5,
+    "num_episodes": 1000,
+    "state_dim": 12,
+    "actor_hidden_dim": 64,
+    "critic_hidden_dim": 64,
+    "action_dim": 6,
+    "num_actor_hidden_layers": 4,
+    "num_critic_hidden_layers": 4,
+    "gamma": 0.98,
+    "tau": 0.005,
+    "buffer_size": 10000,
+    "minimal_size": 500,
+    "batch_size": 128,
+    "target_entropy": -1
+}

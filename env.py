@@ -151,3 +151,6 @@ class Env:
     
     def get_step_now(self):
         return self.step_num
+    
+    def get_score(self):
+        return self.success_reward

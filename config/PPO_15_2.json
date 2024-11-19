@@ -1,18 +1,19 @@
 {
-    "config_name": "PPO-15",
-    "algorithm": "PPO",
+    "config_name": "PPO-15_2",
     "actor_lr": 2e-5,
-    "critic_lr": 1e-4,
+    "critic_lr": 5e-5,
     "num_episodes": 3000,
     "state_dim": 12,
     "actor_hidden_dim": 128,
     "critic_hidden_dim": 128,
     "action_dim": 6,
-    "num_actor_hidden_layers": 4,
-    "num_critic_hidden_layers": 4,
+    "num_actor_hidden_layers": 6,
+    "num_critic_hidden_layers": 6,
     "gamma": 0.99,
     "lmbda": 0.95,
     "residual_strength": 0,
     "epochs": 15,
-    "eps": 0.2
+    "eps": 0.2,
+    "//": "output/1116/2357_PPO-15_2/actor.pth",
+    "//": "output/1116/2357_PPO-15_2/critic.pth"
 }

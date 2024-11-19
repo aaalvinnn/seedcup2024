@@ -1,0 +1,20 @@
+{
+    "config_name": "PPO-15_1_SAC",
+    "algorithm": "SAC",
+    "actor_lr": 2e-5,
+    "critic_lr": 5e-5,
+    "alpha_lr": 2e-5,
+    "num_episodes": 1000,
+    "state_dim": 12,
+    "actor_hidden_dim": 128,
+    "critic_hidden_dim": 128,
+    "action_dim": 6,
+    "num_actor_hidden_layers": 6,
+    "num_critic_hidden_layers": 6,
+    "gamma": 0.99,
+    "tau": 0.005,
+    "buffer_size": 10000,
+    "minimal_size": 500,
+    "batch_size": 128,
+    "target_entropy": -1
+}
