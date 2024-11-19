@@ -2,3 +2,5 @@ stable_baselines3
 numpy < 2
 scipy
 pybullet
+tensorboard
+tqdm

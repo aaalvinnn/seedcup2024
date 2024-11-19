@@ -87,9 +87,9 @@ class mySACAlgorithm:
                                                    lr=critic_lr)
         self.critic_2_optimizer = torch.optim.Adam(self.critic_2.parameters(),
                                                    lr=critic_lr)
-        self.actor_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.actor_optimizer, T_max=nums_episodes, eta_min=actor_lr/10)
-        self.critic_1_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_1_optimizer, T_max=nums_episodes, eta_min=critic_lr/10)
-        self.critic_2_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_2_optimizer, T_max=nums_episodes, eta_min=critic_lr/10)
+        self.actor_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.actor_optimizer, T_max=nums_episodes, eta_min=actor_lr/2)
+        self.critic_1_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_1_optimizer, T_max=nums_episodes, eta_min=critic_lr/2)
+        self.critic_2_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_2_optimizer, T_max=nums_episodes, eta_min=critic_lr/2)
         # 使用alpha的log值,可以使训练结果比较稳定
         self.log_alpha = torch.tensor(np.log(0.01), dtype=torch.float)
         self.log_alpha.requires_grad = True  # 可以对alpha求梯度
@@ -215,9 +215,46 @@ class mySACAlgorithm:
 
         # 2. 移动时碰到障碍物
         if obstacle_contact:
-            reward -= 5 + n_obstacle * 0.5
+            reward -= 8 + n_obstacle * 0.2
 
         # 3. 到达奖励, 范围为0~100
+        if step >= self.env_max_steps or dist < 0.05:
+            reward += final_score
+
+        return reward
+    
+    def reward_total_11_4(self, dist, pre_dist, obstacle_contact, n_obstacle, step, final_score):
+        reward = 0
+        # 1. 鼓励机械臂向目标物体前进，1个step最大变化0.005m，dist的范围为0.05~1m
+        # 范围 (-5, 5)
+        delta = (dist - pre_dist)
+        reward -= delta * 800
+
+        # 2. 移动时碰到障碍物
+        if obstacle_contact:
+            reward -= 6 + n_obstacle * 0.2
+
+        # 3. 到达奖励, 范围为0~100
+        if step >= self.env_max_steps or dist < 0.05:
+            reward += final_score
+
+        return reward
+    
+    def reward_total_11_5(self, dist, pre_dist, obstacle_contact, n_obstacle, step, final_score):
+        reward = 0
+        # 1. 鼓励机械臂向目标物体前进，1个step最大变化0.005m，dist的范围为0.05~1m
+        # 范围 (-5, 5)
+        delta = (dist - pre_dist)
+        reward -= delta * 800
+
+        # 2. 移动时碰到障碍物
+        if obstacle_contact:
+            reward -= 6 + n_obstacle * 0.1
+
+        # 3. 添加势能函数，取值范围(-5, 5)
+        reward += (0.05 - dist) * 5 + 2.5
+
+        # 4. 到达奖励, 范围为0~100
         if step >= self.env_max_steps or dist < 0.05:
             reward += final_score
 

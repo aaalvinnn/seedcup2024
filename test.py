@@ -39,6 +39,7 @@ def main(algorithm):
     # After exiting the loop, get the total steps and final distance
     print("Test completed. Total steps:", avg_steps, "Final distance:", avg_distance, "Final score:", final_score, "Total obstacle:", total_obstacle)
     env.close()
+    return final_score, avg_distance, total_obstacle, avg_steps
 
 if __name__ == "__main__":
     # algorithm = PPOAlgorithm()
