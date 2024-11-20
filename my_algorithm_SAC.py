@@ -259,6 +259,26 @@ class mySACAlgorithm:
             reward += final_score
 
         return reward
+    
+    def reward_total_11_6(self, dist, pre_dist, obstacle_contact, n_obstacle, step, final_score):
+        reward = 0
+        # 1. 鼓励机械臂向目标物体前进，1个step最大变化0.005m，dist的范围为0.05~1m
+        # 范围 (-5, 5)
+        delta = (dist - pre_dist)
+        reward -= delta * 800
+
+        # 2. 移动时碰到障碍物
+        if obstacle_contact:
+            reward -= 6
+
+        # 3. 添加势能函数，取值范围(-5, 5)
+        reward += (0.05 - dist) * 5 + 2.5
+
+        # 4. 到达奖励, 范围为0~100
+        if step >= self.env_max_steps or dist < 0.05:
+            reward += final_score
+
+        return reward
 
     def preprocess_state(self, state):
         return state

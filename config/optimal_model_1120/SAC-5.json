@@ -1,5 +1,5 @@
 {
-    "config_name": "SAC-2",
+    "config_name": "SAC-5",
     "algorithm": "SAC",
     "actor_lr": 1e-5,
     "critic_lr": 5e-5,
@@ -9,8 +9,8 @@
     "actor_hidden_dim": 64,
     "critic_hidden_dim": 64,
     "action_dim": 6,
-    "num_actor_hidden_layers": 5,
-    "num_critic_hidden_layers": 5,
+    "num_actor_hidden_layers": 8,
+    "num_critic_hidden_layers": 8,
     "gamma": 0.99,
     "tau": 0.005,
     "buffer_size": 10000,
