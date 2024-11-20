@@ -1,5 +1,5 @@
 {
-    "config_name": "SAC-3",
+    "config_name": "SAC-3_7",
     "algorithm": "SAC",
     "actor_lr": 1e-5,
     "critic_lr": 5e-5,
@@ -17,7 +17,11 @@
     "minimal_size": 500,
     "batch_size": 128,
     "target_entropy": -1,
-    "pretrained_actor": "pretrained_models/SAC-3/actor_init.pth",
-    "pretrained_critic_1": "pretrained_models/SAC-3/critic_1_init.pth",
-    "pretrained_critic_2": "pretrained_models/SAC-3/critic_2_init.pth"
+    "pretrained_actor": "output/1119/2159_SAC-3/actor.pth",
+    "pretrained_critic_1": "output/1119/2159_SAC-3/critic_1.pth",
+    "pretrained_critic_2": "output/1119/2159_SAC-3/critic_2_init.pth",
+    "a": 800,
+    "b": 6,
+    "c": 0.1,
+    "d": 8
 }

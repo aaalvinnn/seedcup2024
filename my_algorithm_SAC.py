@@ -68,14 +68,19 @@ def initialize_weights(m):
 class mySACAlgorithm:
     ''' 处理连续动作的SAC算法 '''
     def __init__(self, nums_episodes, state_dim, actor_hidden_dim, critic_hidden_dim, action_dim, num_actor_hidden_layers, num_critic_hidden_layers, actor_lr, critic_lr, alpha_lr, 
-                 target_entropy, tau, gamma, device):
+                 target_entropy, tau, gamma, device, pretrained_actor=None, pretrained_critic_1=None, pretrained_critic_2=None, a=800, b=6, c=0.1, d=5):
         self.action_bound = 1
         self.actor = PolicyNet(state_dim, actor_hidden_dim, num_actor_hidden_layers, action_dim, self.action_bound).to(device)  # 策略网络
         self.critic_1 = ValueNet(state_dim, critic_hidden_dim, num_critic_hidden_layers,action_dim).to(device)  # 第一个Q网络
         self.critic_2 = ValueNet(state_dim, critic_hidden_dim, num_critic_hidden_layers,action_dim).to(device)  # 第二个Q网络
-        self.actor.apply(initialize_weights)
-        self.critic_1.apply(initialize_weights)
-        self.critic_2.apply(initialize_weights)
+        if (pretrained_actor == None):
+            self.actor.apply(initialize_weights)
+            self.critic_1.apply(initialize_weights)
+            self.critic_2.apply(initialize_weights)
+        else:
+            self.actor.load_state_dict(torch.load(pretrained_actor, weights_only=True))
+            self.critic_1.load_state_dict(torch.load(pretrained_critic_1, weights_only=True))
+            self.critic_2.load_state_dict(torch.load(pretrained_critic_2, weights_only=True))
         self.target_critic_1 = ValueNet(state_dim, critic_hidden_dim, num_critic_hidden_layers,action_dim).to(device)  # 第一个目标Q网络
         self.target_critic_2 = ValueNet(state_dim, critic_hidden_dim, num_critic_hidden_layers,action_dim).to(device)  # 第二个目标Q网络
         # 令目标Q网络的初始参数和Q网络一样
@@ -100,6 +105,10 @@ class mySACAlgorithm:
         self.tau = tau
         self.device = device
         self.env_max_steps = 100
+        self.a = a if a is not None else 800
+        self.b = b if b is not None else 6
+        self.c = c if c is not None else 0.1
+        self.d = d if d is not None else 5
 
     def reset(self, init_state):
         self.is_obstacled = False
@@ -253,6 +262,26 @@ class mySACAlgorithm:
 
         # 3. 添加势能函数，取值范围(-5, 5)
         reward += (0.05 - dist) * 5 + 2.5
+
+        # 4. 到达奖励, 范围为0~100
+        if step >= self.env_max_steps or dist < 0.05:
+            reward += final_score
+
+        return reward
+    
+    def reward_total_11_5_test(self, dist, pre_dist, obstacle_contact, n_obstacle, step, final_score):
+        reward = 0
+        # 1. 鼓励机械臂向目标物体前进，1个step最大变化0.005m，dist的范围为0.05~1m
+        # 范围 (-5, 5)
+        delta = (dist - pre_dist)
+        reward -= delta * self.a
+
+        # 2. 移动时碰到障碍物
+        if obstacle_contact:
+            reward -= self.b + n_obstacle * self.c
+
+        # 3. 添加势能函数，取值范围(-5, 5)
+        reward += (0.55 - dist) * self.d
 
         # 4. 到达奖励, 范围为0~100
         if step >= self.env_max_steps or dist < 0.05:
