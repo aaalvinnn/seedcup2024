@@ -88,7 +88,7 @@ def train_offline_policy_agent(algorithm: mySACAlgorithm, num_episodes, replay_b
                     new_state = algorithm.preprocess_state(env.get_observation()[0])
                     done = env.terminated
                     # reward = reward_algorithm.reward_total_8_1_1(env.get_dis(), pre_dist, env.is_obstacle_contact(), env.get_step_now())
-                    reward = algorithm.reward_total_11_6(env.get_dis(), pre_dist, env.is_obstacle_contact(), total_obstacle, env.get_step_now(), env.get_score())
+                    reward = algorithm.reward_total_11_5_test(env.get_dis(), pre_dist, env.is_obstacle_contact(), total_obstacle, env.get_step_now(), env.get_score())
                     replay_buffer.add(state, action, reward, new_state, done)
                     total_reward += reward
                     score += env.success_reward
@@ -344,7 +344,14 @@ def train_one_config(config_file_path, is_log):
             target_entropy=config["target_entropy"],
             tau=config["tau"],
             gamma=config["gamma"],
-            device=device
+            device=device,
+            pretrained_actor=config.get("pretrained_actor"),
+            pretrained_critic_1=config.get("pretrained_critic_1"),
+            pretrained_critic_2=config.get("pretrained_critic_2"),
+            a=config.get("a"),
+            b=config.get("b"),
+            c=config.get("c"),
+            d=config.get("d")
         )
         score100, mean_score, mean_reward, mean_obstacle, mean_end_dist = train_offline_policy_agent(algorithm=algorithm,
             num_episodes=config["num_episodes"],
