@@ -68,8 +68,9 @@ def initialize_weights(m):
 class mySACAlgorithm:
     ''' 处理连续动作的SAC算法 '''
     def __init__(self, nums_episodes, state_dim, actor_hidden_dim, critic_hidden_dim, action_dim, num_actor_hidden_layers, num_critic_hidden_layers, actor_lr, critic_lr, alpha_lr, 
-                 target_entropy, tau, gamma, device, pretrained_actor=None, pretrained_critic_1=None, pretrained_critic_2=None, a=800, b=6, c=0.1, d=5):
+                 target_entropy, tau, gamma, device, pretrained_actor=None, pretrained_critic_1=None, pretrained_critic_2=None, a=800, b=6, c=0.1, d=5, e=1):
         self.action_bound = 1
+        self.action_dim = action_dim
         self.actor = PolicyNet(state_dim, actor_hidden_dim, num_actor_hidden_layers, action_dim, self.action_bound).to(device)  # 策略网络
         self.critic_1 = ValueNet(state_dim, critic_hidden_dim, num_critic_hidden_layers,action_dim).to(device)  # 第一个Q网络
         self.critic_2 = ValueNet(state_dim, critic_hidden_dim, num_critic_hidden_layers,action_dim).to(device)  # 第二个Q网络
@@ -92,9 +93,34 @@ class mySACAlgorithm:
                                                    lr=critic_lr)
         self.critic_2_optimizer = torch.optim.Adam(self.critic_2.parameters(),
                                                    lr=critic_lr)
-        self.actor_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.actor_optimizer, T_max=nums_episodes, eta_min=actor_lr/2)
-        self.critic_1_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_1_optimizer, T_max=nums_episodes, eta_min=critic_lr/2)
-        self.critic_2_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_2_optimizer, T_max=nums_episodes, eta_min=critic_lr/2)
+        # self.actor_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.actor_optimizer, T_max=nums_episodes, eta_min=actor_lr)
+        # self.critic_1_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_1_optimizer, T_max=nums_episodes, eta_min=critic_lr)
+        # self.critic_2_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_2_optimizer, T_max=nums_episodes, eta_min=critic_lr)
+        self.actor_scheduler = optim.lr_scheduler.OneCycleLR(
+            self.actor_optimizer,
+            max_lr=actor_lr*10,
+            total_steps=nums_episodes*100,
+            anneal_strategy='cos',
+            cycle_momentum=True,
+            div_factor=10,    # 学习率衰减的分割因子
+        )
+        self.critic_1_scheduler = optim.lr_scheduler.OneCycleLR(
+            self.critic_1_optimizer,
+            max_lr=critic_lr*10,
+            total_steps=nums_episodes*100,
+            anneal_strategy='cos',
+            cycle_momentum=True,
+            div_factor=10,    # 学习率衰减的分割因子
+        )
+        self.critic_2_scheduler = optim.lr_scheduler.OneCycleLR(
+            self.critic_2_optimizer,
+            max_lr=critic_lr*10,
+            total_steps=nums_episodes*100,
+            anneal_strategy='cos',
+            cycle_momentum=True,
+            div_factor=10,    # 学习率衰减的分割因子
+        )
+        
         # 使用alpha的log值,可以使训练结果比较稳定
         self.log_alpha = torch.tensor(np.log(0.01), dtype=torch.float)
         self.log_alpha.requires_grad = True  # 可以对alpha求梯度
@@ -109,6 +135,7 @@ class mySACAlgorithm:
         self.b = b if b is not None else 6
         self.c = c if c is not None else 0.1
         self.d = d if d is not None else 5
+        self.e = e if e is not None else 1
 
     def reset(self, init_state):
         self.is_obstacled = False
@@ -283,7 +310,34 @@ class mySACAlgorithm:
         # 3. 添加势能函数，取值范围(-5, 5)
         reward += (0.55 - dist) * self.d
 
-        # 4. 到达奖励, 范围为0~100
+        # 4. 衰减reward shaping
+        reward *= self.e
+
+        # 5. 到达奖励, 范围为0~100
+        if step >= self.env_max_steps or dist < 0.05:
+            reward += final_score
+
+        return reward
+    
+    def reward_total_12_test(self, dist, pre_dist, obstacle_contact, n_obstacle, step, final_score):
+        reward = 0
+        # 1. 鼓励机械臂向目标物体前进，1个step最大变化0.005m，dist的范围为0.05~1m
+        # 范围 (-5, 5)
+        delta = (dist - pre_dist)
+        reward -= delta * self.a
+
+        # 2. 移动时碰到障碍物
+        if obstacle_contact:
+            reward -= self.b + n_obstacle * self.c
+
+        # 3. 添加势能函数，取值范围(0, 20)，非线性
+        reward += 1 / dist * self.d
+
+
+        # 4. 衰减reward shaping
+        reward *= self.e
+
+        # 5. 到达奖励, 范围为0~100
         if step >= self.env_max_steps or dist < 0.05:
             reward += final_score
 
@@ -306,7 +360,10 @@ class mySACAlgorithm:
 
         return np.concatenate([jixiebi_state, [dest_stateX], [dest_stateY], [dest_stateZ], [obstacle_stateX], [obstacle_stateY], [obstacle_stateZ]])
 
-    def get_action(self, state):
+    def get_action(self, state, epsilon=0.1):
+        # if np.random.rand() < epsilon:
+        #     random_action = np.random.uniform(-1, 1, size=self.action_dim)
+        #     return random_action
         state = np.concatenate([state], axis=-1)
         state = torch.tensor([state], dtype=torch.float).to(self.device)
         action = self.actor(state)[0]
