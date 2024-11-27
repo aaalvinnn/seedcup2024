@@ -1,5 +1,5 @@
 {
-    "config_name": "SAC-3_8",
+    "config_name": "SAC-3_6",
     "algorithm": "SAC",
     "actor_lr": 5e-6,
     "critic_lr": 2e-5,
@@ -15,13 +15,13 @@
     "tau": 0.005,
     "buffer_size": 10000,
     "minimal_size": 500,
-    "batch_size": 128,
+    "batch_size": 64,
     "target_entropy": -1,
-    "pretrained_actor": "output/1120/0439_SAC-3_8/actor_best.pth",
-    "pretrained_critic_1": "output/1120/0439_SAC-3_8/critic_1_best.pth",
-    "pretrained_critic_2": "output/1120/0439_SAC-3_8/critic_2_best.pth",
-    "a": 1000,
+    "pretrained_actor": "output/1119/1842_SAC-3_score62/actor_best.pth",
+    "pretrained_critic_1": "output/1119/1842_SAC-3_score62/critic_1_best.pth",
+    "pretrained_critic_2": "output/1119/1842_SAC-3_score62/critic_2_best.pth",
+    "a": 900,
     "b": 6,
-    "c": 0.15,
-    "d": 5
+    "c": 0.1,
+    "d": 1
 }
