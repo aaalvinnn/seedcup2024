@@ -11,53 +11,52 @@ from reward_algorithm import *  # v1~v8
 # v9: 作为类成员函数，这里reward定义为全局变量，以反映全局策略。见下myPPOAlgorithm类
 
 # PPO compute advantage funciton
+# def compute_advantage(gamma, lmbda, td_delta):
+#     td_delta = td_delta.detach().numpy()
+#     advantage_list = []
+#     advantage = 0.0
+#     for delta in td_delta[::-1]:
+#         advantage = gamma * lmbda * advantage + delta
+#         advantage_list.append(advantage)
+#     advantage_list.reverse()
+#     return torch.tensor(advantage_list, dtype=torch.float)
+
 def compute_advantage(gamma, lmbda, td_delta):
-    td_delta = td_delta.detach().numpy()
+    td_delta = td_delta.detach().numpy()  # 将张量转换为 NumPy 数组
     advantage_list = []
     advantage = 0.0
+
     for delta in td_delta[::-1]:
         advantage = gamma * lmbda * advantage + delta
         advantage_list.append(advantage)
+    
     advantage_list.reverse()
-    return torch.tensor(advantage_list, dtype=torch.float)
+    advantage_tensor = torch.tensor(advantage_list, dtype=torch.float)
+    advantage_tensor = (advantage_tensor - advantage_tensor.mean()) / (advantage_tensor.std() + 1e-8)
+    
+    return advantage_tensor
 
-# v1
-# class PolicyNet(torch.nn.Module):
-#     def __init__(self, state_dim, hidden_dim, action_dim, num_hidden_layers=2):
-#         super(PolicyNet, self).__init__()
-#         # input layer
-#         self.layers = torch.nn.ModuleList()
-#         self.layers.append(torch.nn.Linear(state_dim, hidden_dim))
-#         # hidden layers
-#         for _ in range(num_hidden_layers - 1):
-#             self.layers.append(torch.nn.Linear(hidden_dim, hidden_dim))
-#         # output layers
-#         self.fc_mu = torch.nn.Linear(hidden_dim, action_dim)
-#         self.fc_std = torch.nn.Linear(hidden_dim, action_dim)
 
-#     def forward(self, x):
-#         for layer in self.layers:
-#             x = F.relu(layer(x))
-#         mu = torch.tanh(self.fc_mu(x))
-#         std = F.softplus(self.fc_std(x))
-#         return mu, std
+def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
+    torch.nn.init.orthogonal_(layer.weight, std)
+    torch.nn.init.constant_(layer.bias, bias_const)
+    return layer
 
-# v2
 class PolicyNet(torch.nn.Module):
     def __init__(self, state_dim, hidden_dim, action_dim, num_hidden_layers=2, residual_strength=0, dropout=0, n_state_steps=1):
         super(PolicyNet, self).__init__()
-        self.residual_strength = residual_strength
+        self.residual_strength = residual_strength if residual_strength is not None else 0
         # input layer
         self.layers = torch.nn.ModuleList()
-        self.layers.append(torch.nn.Linear(state_dim*n_state_steps, hidden_dim))
+        self.layers.append(layer_init(torch.nn.Linear(state_dim*n_state_steps, hidden_dim)))
 
         # hidden layers
         for _ in range(num_hidden_layers - 1):
-            self.layers.append(torch.nn.Linear(hidden_dim, hidden_dim))
+            self.layers.append(layer_init(torch.nn.Linear(hidden_dim, hidden_dim)))
 
         # output layers
-        self.fc_mu = torch.nn.Linear(hidden_dim, action_dim)
-        self.fc_std = torch.nn.Linear(hidden_dim, action_dim)
+        self.fc_mu = layer_init(torch.nn.Linear(hidden_dim, action_dim), std=0.01)
+        self.fc_std = nn.Parameter(torch.zeros(1, action_dim))
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
@@ -67,129 +66,22 @@ class PolicyNet(torch.nn.Module):
                 x = x + residual  # 添加残差
 
         mu = torch.tanh(self.fc_mu(x))
-        std = F.softplus(self.fc_std(x))
+        std = torch.exp(self.fc_std.expand_as(mu))
         return mu, std
-    
-# v2.1 add dropout
-# class PolicyNet(torch.nn.Module):
-#     def __init__(self, state_dim, hidden_dim, action_dim, num_hidden_layers=2, residual_strength=0, dropout=0.1):
-#         super(PolicyNet, self).__init__()
-#         self.residual_strength = residual_strength
-#         self.dropout = dropout
-
-#         # input layer
-#         self.layers = torch.nn.ModuleList()
-#         self.layers.append(torch.nn.Linear(state_dim, hidden_dim))
-
-#         # hidden layers
-#         self.dropouts = torch.nn.ModuleList()
-#         for _ in range(num_hidden_layers - 1):
-#             self.layers.append(torch.nn.Linear(hidden_dim, hidden_dim))
-#             self.dropouts.append(torch.nn.Dropout(self.dropout))
-
-#         # output layers
-#         self.fc_mu = torch.nn.Linear(hidden_dim, action_dim)
-#         self.fc_std = torch.nn.Linear(hidden_dim, action_dim)
-
-#     def forward(self, x):
-#         for i, (layer, dropout) in enumerate(zip(self.layers, self.dropouts)):
-#             residual = self.residual_strength * x
-#             x = layer(x)
-#             x = dropout(x)
-#             x = F.leaky_relu(x)
-#             if (x.shape == residual.shape):
-#                 x = x + residual  # 添加残差
-
-#         mu = torch.tanh(self.fc_mu(x))
-#         std = F.softplus(self.fc_std(x))
-#         return mu, std
-
-# v2.1 self-attention
-# class PolicyNet(torch.nn.Module):
-#     def __init__(self, state_dim, hidden_dim, action_dim, num_hidden_layers=2, residual_strength=0, num_heads=4):
-#         super(PolicyNet, self).__init__()
-#         self.residual_strength = residual_strength
-
-#         # input layers
-#         self.attention = nn.MultiheadAttention(embed_dim=state_dim, num_heads=num_heads, batch_first=True)
-
-#         # hidden layers
-#         self.layers = torch.nn.ModuleList()
-#         self.layers.append(torch.nn.Linear(state_dim, hidden_dim))
-#         for _ in range(num_hidden_layers-1):
-#             self.layers.append(torch.nn.Linear(hidden_dim, hidden_dim))
-
-#         # output layers
-#         self.fc_mu = torch.nn.Linear(hidden_dim, action_dim)
-#         self.fc_std = torch.nn.Linear(hidden_dim, action_dim)
-
-#     def forward(self, x):
-#         x, _ = self.attention(x, x, x)
-#         x = F.leaky_relu(x)
-
-#         for i, layer in enumerate(self.layers):
-#             residual = self.residual_strength * x
-#             x = F.leaky_relu(layer(x))
-#             if (x.shape == residual.shape) and (i % 2):
-#                 x = x + residual  # 添加残差
-
-#         mu = torch.tanh(self.fc_mu(x))
-#         std = F.softplus(self.fc_std(x))
-#         return mu, std
-
-# # v3 add multi-head self-attention
-# class PolicyNet(torch.nn.Module):
-#     def __init__(self, state_dim, hidden_dim, action_dim, num_hidden_layers=2, residual_strength=0, num_heads=4):
-#         super(PolicyNet, self).__init__()
-#         self.residual_strength = residual_strength
-#         self.num_heads = num_heads
-
-#         # input layer
-#         self.input_fc = nn.Linear(state_dim, hidden_dim)
-
-#         # Add attention layer
-#         self.attention = nn.MultiheadAttention(embed_dim=hidden_dim, num_heads=num_heads, batch_first=True)
-
-#         # hidden layers
-#         self.layers = torch.nn.ModuleList()
-#         for _ in range(num_hidden_layers-1):
-#             self.layers.append(torch.nn.Linear(hidden_dim, hidden_dim))
-
-#         # output layers
-#         self.fc_mu = torch.nn.Linear(hidden_dim, action_dim)
-#         self.fc_std = torch.nn.Linear(hidden_dim, action_dim)
-
-#     def forward(self, x):
-#         x = self.input_fc(x)
-#         x, _ = self.attention(x, x, x)
-#         x = F.leaky_relu(x)
-
-#         for i, layer in enumerate(self.layers):
-#             residual = self.residual_strength * x
-#             x = F.leaky_relu(layer(x))
-#             if (x.shape == residual.shape) and (i % 2):
-#                 x = x + residual  # 添加残差
-
-#         mu = torch.tanh(self.fc_mu(x))
-#         std = F.softplus(self.fc_std(x))
-#         return mu, std
-    
-# v4 add CNN
-
 
 # v1
 class ValueNet(torch.nn.Module):
     def __init__(self, state_dim, hidden_dim, num_hidden_layers=2, residual_strength=0, dropout=0, n_state_steps=1):
         super(ValueNet, self).__init__()
-        self.residual_strength = residual_strength
+        self.residual_strength = residual_strength if residual_strength is not None else 0
         # input layer
         self.layers = torch.nn.ModuleList()
-        self.layers.append(torch.nn.Linear(state_dim*n_state_steps, hidden_dim))
+        self.layers.append(layer_init(torch.nn.Linear(state_dim*n_state_steps, hidden_dim)))
         # hidden layers
         for _ in range(num_hidden_layers - 1):
-            self.layers.append(torch.nn.Linear(hidden_dim, hidden_dim))
+            self.layers.append(layer_init(torch.nn.Linear(hidden_dim, hidden_dim)))
         # output layers
-        self.fc_out = torch.nn.Linear(hidden_dim, 1)
+        self.fc_out = layer_init(torch.nn.Linear(hidden_dim, 1), std=1.0)
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
@@ -199,75 +91,6 @@ class ValueNet(torch.nn.Module):
                 x = x + residual  # 添加残差
 
         return self.fc_out(x)
-
-# v2 add dropout
-# class ValueNet(torch.nn.Module):
-#     def __init__(self, state_dim, hidden_dim, num_hidden_layers=2, residual_strength=0, dropout=0.1):
-#         super(ValueNet, self).__init__()
-#         self.residual_strength = residual_strength
-#         self.dropout = dropout
-
-#         # input layer
-#         self.layers = torch.nn.ModuleList()
-#         self.layers.append(torch.nn.Linear(state_dim, hidden_dim))
-
-#         # hidden layers
-#         self.dropouts = torch.nn.ModuleList()
-#         for _ in range(num_hidden_layers - 1):
-#             self.layers.append(torch.nn.Linear(hidden_dim, hidden_dim))
-#             self.dropouts.append(torch.nn.Dropout(self.dropout))
-
-#         # output layers
-#         self.fc_out = torch.nn.Linear(hidden_dim, 1)
-
-#     def forward(self, x):
-#         for i, (layer, dropout) in enumerate(zip(self.layers, self.dropouts)):
-#             residual = x * self.residual_strength
-#             x = layer(x)
-#             x = dropout(x)
-#             x = F.leaky_relu(x)
-#             if (x.shape == residual.shape):
-#                 x = x + residual  # 添加残差
-
-#         return self.fc_out(x)
-    
-# # v2 self-attention
-# class ValueNet(torch.nn.Module):
-#     def __init__(self, state_dim, hidden_dim, num_hidden_layers=2, residual_strength=0, num_heads=4):
-#         super(ValueNet, self).__init__()
-#         self.residual_strength = residual_strength
-
-#         # input layer
-#         self.attention = nn.MultiheadAttention(embed_dim=state_dim, num_heads=num_heads, batch_first=True)
-
-#         # hidden layers
-#         self.layers = torch.nn.ModuleList()
-#         self.layers.append(torch.nn.Linear(state_dim, hidden_dim))
-#         # hidden layers
-#         for _ in range(num_hidden_layers - 1):
-#             self.layers.append(torch.nn.Linear(hidden_dim, hidden_dim))
-#         # output layers
-#         self.fc_out = torch.nn.Linear(hidden_dim, 1)
-
-#     def forward(self, x):
-#         x, _ = self.attention(x, x, x)
-#         x = F.leaky_relu(x)
-
-#         for i, layer in enumerate(self.layers):
-#             residual = x * self.residual_strength
-#             x = F.leaky_relu(layer(x))
-#             if (x.shape == residual.shape) and (i % 2):
-#                 x = x + residual  # 添加残差
-
-        return self.fc_out(x)
-    
-def initialize_weights(m):
-    if isinstance(m, nn.Linear):
-        # 使用Kaiming正态分布初始化权重
-        nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='leaky_relu')
-        # 初始化偏置为零
-        if m.bias is not None:
-            nn.init.constant_(m.bias, 0)
 
 class myPPOAlgorithm:
     ''' 处理连续动作的PPO算法 '''
@@ -279,8 +102,6 @@ class myPPOAlgorithm:
         self.actor = PolicyNet(state_dim, actor_hidden_dim, action_dim, num_actor_hidden_layers, residual_strength, dropout, n_state_steps).to(device)
         self.critic = ValueNet(state_dim, critic_hidden_dim, num_critic_hidden_layers, residual_strength, dropout, n_state_steps).to(device)
         if (actor_pretrained_model is None):
-            self.actor.apply(initialize_weights)
-            self.critic.apply(initialize_weights)
             pass
         else:
             self.actor.load_state_dict(torch.load(actor_pretrained_model))
@@ -288,8 +109,9 @@ class myPPOAlgorithm:
             pass
         self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=actor_lr)
         self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=critic_lr)
-        self.actor_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.actor_optimizer, T_max=nums_episodes, eta_min=actor_lr/2)
-        self.critic_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_optimizer, T_max=nums_episodes, eta_min=critic_lr/2)
+        self.actor_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.actor_optimizer, T_max=nums_episodes, eta_min=actor_lr/3)
+        self.critic_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_optimizer, T_max=nums_episodes, eta_min=critic_lr/3)
+
         self.gamma = gamma
         self.lmbda = lmbda
         self.epochs = epochs
@@ -572,6 +394,26 @@ class myPPOAlgorithm:
         # 2. 移动时碰到障碍物
         if obstacle_contact:
             reward -= 6 + n_obstacle * 0.1
+
+        # 3. 添加势能函数，取值范围(-5, 5)
+        reward += (0.05 - dist) * 5 + 2.5
+
+        # 4. 到达奖励, 范围为0~100
+        if step >= self.env_max_steps or dist < 0.05:
+            reward += final_score
+
+        return reward
+    
+    def reward_total_11_6(self, dist, pre_dist, obstacle_contact, n_obstacle, step, final_score):
+        reward = 0
+        # 1. 鼓励机械臂向目标物体前进，1个step最大变化0.005m，dist的范围为0.05~1m
+        # 范围 (-5, 5)
+        delta = (dist - pre_dist)
+        reward -= delta * 500
+
+        # 2. 移动时碰到障碍物
+        if obstacle_contact:
+            reward -= 5 + n_obstacle * 0.1
 
         # 3. 添加势能函数，取值范围(-5, 5)
         reward += (0.05 - dist) * 5 + 2.5

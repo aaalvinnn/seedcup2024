@@ -14,6 +14,7 @@ import collections
 import reward_algorithm
 import random
 import csv
+import time
 
 # device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 device = torch.device("cpu")
@@ -46,9 +47,10 @@ def env_step_log(env: Env, action, reward, obstacle_contact):
         # State: {env.get_observation()[0]}\nAction: {action}\n")
 
 
-def train_offline_policy_agent(algorithm: mySACAlgorithm, num_episodes, replay_buffer_size, minimal_size, batch_size, config, is_log):
+def train_offline_policy_agent(algorithm: mySACAlgorithm, num_episodes, replay_buffer_size, minimal_size, batch_size, config, seed, is_log):
     replay_buffer = ReplayBuffer(replay_buffer_size)
-    
+    output_dir = None
+
     if is_log:
         cur_time = datetime.now()
         output_fir_name = os.path.join("output", cur_time.strftime("%m%d"), cur_time.strftime("%H%M") + "_" + config)
@@ -60,13 +62,14 @@ def train_offline_policy_agent(algorithm: mySACAlgorithm, num_episodes, replay_b
         log_file = open(os.path.join(output_dir, 'log.txt'), 'w+')
         sys.stdout = log_file
 
-    env = Env(is_senior=True,seed=100,gui=False)
+    env = Env(is_senior=True,seed=seed,gui=False)
     done = False
     total_score_list = []
     score100_best = 0
     total_reward_list = []
     total_obstacle_list = []
     total_dist_list = []
+    epoch_actor_best = 0
 
     for i in range(int(num_episodes/100)):
         with tqdm(total=100, desc='Iteration %d' % i) as pbar:
@@ -118,6 +121,13 @@ def train_offline_policy_agent(algorithm: mySACAlgorithm, num_episodes, replay_b
                     writer.add_scalar('Score', score, epoch)
                     writer.add_scalar('End Distance', env.get_dis(), epoch)
                     writer.add_scalar('Obstacle Contact Num', total_obstacle, epoch)
+                    import wandb
+                    wandb.log({
+                        'Total Reward': total_reward,
+                        'Score': score,
+                        'End Distance': env.get_dis(),
+                        'Obstacle Contact Num': total_obstacle
+                    })
 
                     # model saving
                     # torch.save(algorithm.actor.state_dict(), os.path.join(os.path.dirname(__file__), 'model.pth'))  # 放个在工程根目录下方便test.py测试
@@ -128,6 +138,7 @@ def train_offline_policy_agent(algorithm: mySACAlgorithm, num_episodes, replay_b
                     if (epoch>=100):
                         score100_best = np.mean(total_score_list[-100:]) if np.mean(total_score_list[-100:]) > score100_best else score100_best
                         if (score100_best <= np.mean(total_score_list[-100:])):
+                            epoch_actor_best = epoch
                             torch.save(algorithm.actor.state_dict(), os.path.join(output_dir, 'actor_best.pth'))
                             torch.save(algorithm.critic_1.state_dict(), os.path.join(output_dir, 'critic_1_best.pth'))
                             torch.save(algorithm.critic_2.state_dict(), os.path.join(output_dir, 'critic_2_best.pth'))
@@ -161,13 +172,15 @@ def train_offline_policy_agent(algorithm: mySACAlgorithm, num_episodes, replay_b
                     sys.stdout = sys.__stdout__
                     pbar.update(1)
                     sys.stdout = log_file
-        
-
     env.close()
+    writer.close()
+    if is_log:
+        wandb.save(os.path.join(output_dir, 'actor_best.pth'))
     # 返回最佳test得分，平均总得分，平均奖励回报，平均碰到障碍次数，平均结束距离
     return score100_best, sum(total_score_list)/len(total_score_list), sum(total_reward_list)/len(total_reward_list), sum(total_obstacle_list)/len(total_obstacle_list), sum(total_dist_list)/len(total_dist_list)
 
-def train_online_policy_agent(algorithm: myPPOAlgorithm, num_episodes, config, is_log):
+def train_online_policy_agent(algorithm: myPPOAlgorithm, num_episodes, config, seed, is_log):
+    output_dir = None
     if is_log:
         cur_time = datetime.now()
         output_fir_name = os.path.join("output", cur_time.strftime("%m%d"), cur_time.strftime("%H%M") + "_" + config)
@@ -179,13 +192,14 @@ def train_online_policy_agent(algorithm: myPPOAlgorithm, num_episodes, config, i
         log_file = open(os.path.join(output_dir, 'log.txt'), 'w+')
         sys.stdout = log_file
 
-    env = Env(is_senior=True,seed=100,gui=False)
+    env = Env(is_senior=True,seed=seed,gui=False)
     done = False
     total_score_list = []
     score100_best = 0
     total_reward_list = []
     total_obstacle_list = []
     total_dist_list = []
+    epoch_actor_best = 0
 
     for i in range(int(num_episodes/100)):
         with tqdm(total=100, desc='Iteration %d' % i) as pbar:
@@ -245,6 +259,15 @@ def train_online_policy_agent(algorithm: myPPOAlgorithm, num_episodes, config, i
                     writer.add_scalar('Score', score, epoch)
                     writer.add_scalar('End Distance', env.get_dis(), epoch)
                     writer.add_scalar('Obstacle Contact Num', total_obstacle, epoch)
+                    import wandb
+                    wandb.log({
+                        'Actor Loss': actor_loss,
+                        'Critic Loss': critic_loss,
+                        'Total Reward': total_reward,
+                        'Score': score,
+                        'End Distance': env.get_dis(),
+                        'Obstacle Contact Num': total_obstacle
+                    })
 
                     # model saving
                     # torch.save(algorithm.actor.state_dict(), os.path.join(os.path.dirname(__file__), 'model.pth'))  # 放个在工程根目录下方便test.py测试
@@ -254,6 +277,7 @@ def train_online_policy_agent(algorithm: myPPOAlgorithm, num_episodes, config, i
                     if (epoch>=100):
                         score100_best = np.mean(total_score_list[-100:]) if np.mean(total_score_list[-100:]) > score100_best else score100_best
                         if (score100_best <= np.mean(total_score_list[-100:])):
+                            epoch_actor_best = epoch
                             torch.save(algorithm.actor.state_dict(), os.path.join(output_dir, 'actor_best.pth'))
                             torch.save(algorithm.critic.state_dict(), os.path.join(output_dir, 'critic_best.pth'))
                             # torch.save(algorithm.actor.state_dict(), os.path.join(os.path.dirname(__file__), 'model_best.pth'))  # 放个在工程根目录下方便test.py测试
@@ -288,12 +312,31 @@ def train_online_policy_agent(algorithm: myPPOAlgorithm, num_episodes, config, i
         
 
     env.close()
+    writer.close()
+    if is_log:
+        wandb.save(os.path.join(output_dir, 'actor_best.pth'))
     # 返回最佳test得分，平均总得分，平均奖励回报，平均碰到障碍次数，平均结束距离
     return score100_best, sum(total_score_list)/len(total_score_list), sum(total_reward_list)/len(total_reward_list), sum(total_obstacle_list)/len(total_obstacle_list), sum(total_dist_list)/len(total_dist_list)
 
-def train_one_config(config_file_path, is_log):
+def train_one_config(config_file_path, is_log, seed):
+    # TRY NOT TO MODIFY: seeding
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+
     with open(config_file_path, 'r') as j:
         config = json.load(j)
+    
+    if is_log:
+        import wandb
+        wandb.init(
+            project="robot_test",  # 设置你的项目名称
+            sync_tensorboard=True,
+            config=config,
+            name=f"{config['config_name']}__{seed}__{datetime.now().strftime('%Y%m%d-%H%M%S')}",
+            save_code=True
+        )
     
     config_name = config["config_name"]
     score100 = 0
@@ -317,7 +360,7 @@ def train_one_config(config_file_path, is_log):
             epochs=config["epochs"],
             eps=config["eps"],
             gamma=config["gamma"],
-            residual_strength=config["residual_strength"],
+            residual_strength=config.get("residual_strength"),
             device=device,
             dropout=config.get("dropout"),
             n_state_steps=config.get("n_state_steps"),
@@ -327,7 +370,7 @@ def train_one_config(config_file_path, is_log):
             critic_pretrained_model=config.get("critic_pretrained_model"),
             isTrain=True
         )
-        score100, mean_score, mean_reward, mean_obstacle, mean_end_dist = train_online_policy_agent(algorithm, config["num_episodes"], config["config_name"], is_log)
+        score100, mean_score, mean_reward, mean_obstacle, mean_end_dist = train_online_policy_agent(algorithm, config["num_episodes"], config["config_name"], seed, is_log)
         
     elif (config["algorithm"] == "SAC"):
         algorithm = mySACAlgorithm(
@@ -360,8 +403,11 @@ def train_one_config(config_file_path, is_log):
             minimal_size=config["minimal_size"],
             batch_size=config["batch_size"],
             config=config["config_name"],
+            seed=seed,
             is_log=is_log)
         
+    if is_log:
+        wandb.finish()
     return config_name, score100, mean_score, mean_reward, mean_obstacle, mean_end_dist, datetime.now()
 
 
@@ -370,6 +416,7 @@ if __name__ == "__main__":
     parser.add_argument('--config_path', type=str, required=True, help="Path to the JSON configuration file")
     parser.add_argument('--log', action='store_true', help="Enable logging")
     parser.add_argument('--output_csv', type=str, required=True)
+    parser.add_argument('--seed', type=int, default=100)
     args = parser.parse_args()
 
     with open(args.output_csv, mode='a', newline='') as file:
@@ -378,14 +425,14 @@ if __name__ == "__main__":
 
         if os.path.isfile(args.config_path):
             # 处理单个配置文件
-            config_name, score100, mean_score, mean_reward, mean_obstacle, mean_end_dist, time = train_one_config(args.config_path, args.log)
+            config_name, score100, mean_score, mean_reward, mean_obstacle, mean_end_dist, time = train_one_config(args.config_path, args.log, args.seed)
             writer.writerow([config_name, score100, mean_score, mean_reward, mean_obstacle, mean_end_dist, time])
         
         elif os.path.isdir(args.config_path):
             # 处理目录中的多个配置文件
             config_files = [os.path.join(args.config_path, f) for f in os.listdir(args.config_path) if f.endswith('.json')]
             for config_file in config_files:
-                config_name, score100, mean_score, mean_reward, mean_obstacle, mean_end_dist, time = train_one_config(config_file, args.log)
+                config_name, score100, mean_score, mean_reward, mean_obstacle, mean_end_dist, time = train_one_config(config_file, args.log, args.seed)
                 writer.writerow([config_name, score100, mean_score, mean_reward, mean_obstacle, mean_end_dist, time])
 
     print(f"Results have been written to {args.output_csv}")

@@ -1,2 +1,16 @@
 
 Config File,Score 100,Mean Score,Mean Reward,Mean Obstacle,Mean End Distance,Time
+Config File,Score 100,Mean Score,Mean Reward,Mean Obstacle,Mean End Distance,Time
+SAC-3_8,57.64275660271006,43.61254225366314,347.674123823655,13.892,0.1519784943361106,2024-11-20 09:35:01.937594
+Config File,Score 100,Mean Score,Mean Reward,Mean Obstacle,Mean End Distance,Time
+Config File,Score 100,Mean Score,Mean Reward,Mean Obstacle,Mean End Distance,Time
+SAC-3_8,62.50863596249857,51.1361436432144,480.12013187846117,4.464,0.12852253780293213,2024-11-20 10:28:25.391587
+Config File,Score 100,Mean Score,Mean Reward,Mean Obstacle,Mean End Distance,Time
+Config File,Score 100,Mean Score,Mean Reward,Mean Obstacle,Mean End Distance,Time
+SAC-5,51.14304630026016,31.42797877028455,344.5468849887001,7.271,0.20142297233311232,2024-11-20 11:19:15.371468
+Config File,Score 100,Mean Score,Mean Reward,Mean Obstacle,Mean End Distance,Time
+SAC-5,27.22391871167707,7.288342044260795,155.9085593083682,13.424,0.29854829446578307,2024-11-20 11:57:43.221822
+
+Config File,Score 100,Mean Score,Mean Reward,Mean Obstacle,Mean End Distance,Time
+SAC-5_gamma095,43.47000553531198,34.176704737849725,407.1884559304718,6.474,0.15572194064677503,2024-11-20 15:22:52.041223
+Config File,Score 100,Mean Score,Mean Reward,Mean Obstacle,Mean End Distance,Time
