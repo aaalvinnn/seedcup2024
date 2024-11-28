@@ -2,7 +2,7 @@
     "config_name": "SAC-3_8",
     "algorithm": "SAC",
     "actor_lr": 2e-5,
-    "critic_lr": 5e-5,
+    "critic_lr": 1e-4,
     "alpha_lr": 2e-5,
     "num_episodes": 1000,
     "state_dim": 12,
@@ -20,5 +20,5 @@
     "a": 1000,
     "b": 6,
     "c": 0.15,
-    "d": 5
+    "d": 1
 }

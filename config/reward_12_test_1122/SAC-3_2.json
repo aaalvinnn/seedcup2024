@@ -1,8 +1,8 @@
 {
-    "config_name": "SAC-3_8",
+    "config_name": "SAC-3_2",
     "algorithm": "SAC",
     "actor_lr": 2e-5,
-    "critic_lr": 5e-5,
+    "critic_lr": 1e-4,
     "alpha_lr": 2e-5,
     "num_episodes": 1000,
     "state_dim": 12,
@@ -17,8 +17,11 @@
     "minimal_size": 500,
     "batch_size": 128,
     "target_entropy": -1,
-    "a": 1000,
-    "b": 6,
-    "c": 0.15,
-    "d": 5
+    "pretrained_actor": "output/1122/1807_SAC-3_2/actor_best.pth",
+    "pretrained_critic_1": "output/1122/1807_SAC-3_2/critic_1_best.pth",
+    "pretrained_critic_2": "ooutput/1122/1807_SAC-3_2/critic_2_best.pth",
+    "a": 800,
+    "b": 8,
+    "c": 0.1,
+    "d": 1
 }

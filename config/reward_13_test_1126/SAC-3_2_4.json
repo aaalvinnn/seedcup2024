@@ -1,9 +1,9 @@
 {
-    "config_name": "SAC-3_8",
+    "config_name": "SAC-3_2_4",
     "algorithm": "SAC",
-    "actor_lr": 2e-5,
-    "critic_lr": 5e-5,
-    "alpha_lr": 2e-5,
+    "actor_lr": 5e-5,
+    "critic_lr": 2e-4,
+    "alpha_lr": 5e-5,
     "num_episodes": 1000,
     "state_dim": 12,
     "actor_hidden_dim": 64,
@@ -11,14 +11,14 @@
     "action_dim": 6,
     "num_actor_hidden_layers": 6,
     "num_critic_hidden_layers": 6,
-    "gamma": 0.99,
+    "gamma": 0.90,
     "tau": 0.005,
     "buffer_size": 10000,
     "minimal_size": 500,
     "batch_size": 128,
     "target_entropy": -1,
-    "a": 1000,
-    "b": 6,
+    "a": 500,
+    "b": 5,
     "c": 0.15,
-    "d": 5
+    "d": 1
 }
