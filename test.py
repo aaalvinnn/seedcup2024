@@ -1,5 +1,5 @@
 from env import Env
-from team_algorithm import PPOAlgorithm, MyCustomAlgorithm
+from team_algorithm import MyCustomAlgorithm
 import time
 
 def main(algorithm):

@@ -1,4 +1,3 @@
-from stable_baselines3 import PPO
 from abc import ABC, abstractmethod
 import torch
 import torch.nn.functional as F
@@ -54,7 +53,7 @@ class MyCustomAlgorithm(BaseAlgorithm):
     def __init__(self):
         self.state_dim = 12
         self.hidden_dim = 64
-        self.num_hidden_layers = 6
+        self.num_hidden_layers = 8
         self.action_dim = 6
         self.actor = PolicyNet(self.state_dim, self.hidden_dim, self.num_hidden_layers, self.action_dim, 1)
         model_path = os.path.join(os.path.dirname(__file__), "model.pth")
@@ -66,15 +65,5 @@ class MyCustomAlgorithm(BaseAlgorithm):
         state = np.concatenate([state[0]], axis=-1)
         state = torch.tensor([state], dtype=torch.float)
         action = self.actor(state)[0]
-        return np.array(action.squeeze(0).tolist()) 
-
-# 示例：使用PPO预训练模型
-class PPOAlgorithm(BaseAlgorithm):
-    def __init__(self):
-        self.model = PPO.load("ppo_stablebaselines3_env.zip", device="cpu")
-
-    def get_action(self, observation):
-        action, _ = self.model.predict(observation)
-        return action
-    
+        return np.array(action.squeeze(0).tolist())
 
