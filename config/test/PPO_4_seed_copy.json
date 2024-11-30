@@ -1,9 +1,9 @@
 {
-    "config_name": "PPO-4",
+    "config_name": "PPO-4_copy",
     "algorithm": "PPO",
     "actor_lr": 2e-5,
     "critic_lr": 5e-5,
-    "num_episodes": 100,
+    "num_episodes": 200,
     "state_dim": 12,
     "actor_hidden_dim": 64,
     "critic_hidden_dim": 64,
