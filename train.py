@@ -34,17 +34,9 @@ class ReplayBuffer:
     def size(self): 
         return len(self.buffer)
 
-# 定义经验重放队列，PPO不需要经验重放
-replay_buffer_size = 1#(*100)
-replay_buffer = {'states': collections.deque(maxlen=replay_buffer_size*100),
-                 'actions': collections.deque(maxlen=replay_buffer_size*100),
-                 'next_states': collections.deque(maxlen=replay_buffer_size*100),
-                 'rewards': collections.deque(maxlen=replay_buffer_size*100),
-                 'dones': collections.deque(maxlen=replay_buffer_size*100)}
-
 def env_step_log(env: Env, action, reward, obstacle_contact):
-    print(f"Step: {env.step_num}, dest_dist: {env.get_dis()}, is_Obstacle: {obstacle_contact}, Reward: {reward}")
-        # State: {env.get_observation()[0]}\nAction: {action}\n")
+    print(f"Step: {env.step_num}, dest_dist: {env.get_dis()}, is_Obstacle: {obstacle_contact}, Reward: {reward}\n\
+        State: {env.get_observation()[0]}\nAction: {action}\n")
 
 
 def train_offline_policy_agent(algorithm: mySACAlgorithm, num_episodes, replay_buffer_size, minimal_size, batch_size, config, seed, is_log):
@@ -74,11 +66,12 @@ def train_offline_policy_agent(algorithm: mySACAlgorithm, num_episodes, replay_b
     for i in range(int(num_episodes/100)):
         with tqdm(total=100, desc='Iteration %d' % i) as pbar:
             for i_episode in range(100):
-                algorithm.reset(env.reset()[0])
+                algorithm.reset(env.reset()[0], seed)
                 epoch = 100 * i + i_episode + 1
                 score = 0
                 total_reward = 0
                 total_obstacle = 0
+                actor_loss, alpha_loss, actor_lr, critic_lr, _ = 0, 0, 0, 0, 0
                 done = False
                 transition_dict = {'states': [], 'actions': [], 'next_states': [], 'rewards': [], 'dones': []}
                 state = algorithm.preprocess_state(env.reset()[0])
@@ -100,10 +93,14 @@ def train_offline_policy_agent(algorithm: mySACAlgorithm, num_episodes, replay_b
                     if replay_buffer.size() > minimal_size:
                         b_s, b_a, b_r, b_ns, b_d = replay_buffer.sample(batch_size)
                         transition_dict = {'states': b_s, 'actions': b_a, 'next_states': b_ns, 'rewards': b_r, 'dones': b_d}
-                        algorithm.update(transition_dict)
+                        actor_loss, alpha_loss, actor_lr, critic_lr, _ = algorithm.update(transition_dict)
 
                     if is_log:
                         env_step_log(env, action, reward, env.is_obstacle_contact())
+                        writer.add_scalar('Actor Loss', actor_loss, (epoch-1)*100+env.get_step_now())
+                        writer.add_scalar('Alpha Loss', alpha_loss, (epoch-1)*100+env.get_step_now())
+                        writer.add_scalar('Actor LR', actor_lr, (epoch-1)*100+env.get_step_now())
+                        writer.add_scalar('Critic LR', critic_lr, (epoch-1)*100+env.get_step_now())
 
                     if (env.is_obstacle_contact()):
                         total_obstacle += 1
@@ -121,13 +118,13 @@ def train_offline_policy_agent(algorithm: mySACAlgorithm, num_episodes, replay_b
                     writer.add_scalar('Score', score, epoch)
                     writer.add_scalar('End Distance', env.get_dis(), epoch)
                     writer.add_scalar('Obstacle Contact Num', total_obstacle, epoch)
-                    import wandb
-                    wandb.log({
-                        'Total Reward': total_reward,
-                        'Score': score,
-                        'End Distance': env.get_dis(),
-                        'Obstacle Contact Num': total_obstacle
-                    })
+                    # import wandb
+                    # wandb.log({
+                    #     'Total Reward': total_reward,
+                    #     'Score': score,
+                    #     'End Distance': env.get_dis(),
+                    #     'Obstacle Contact Num': total_obstacle
+                    # }, step=epoch)
 
                     # model saving
                     # torch.save(algorithm.actor.state_dict(), os.path.join(os.path.dirname(__file__), 'model.pth'))  # 放个在工程根目录下方便test.py测试
@@ -173,10 +170,10 @@ def train_offline_policy_agent(algorithm: mySACAlgorithm, num_episodes, replay_b
                     pbar.update(1)
                     sys.stdout = log_file
     env.close()
-    writer.close()
-    if is_log:
-        wandb.save(os.path.join(output_dir, 'actor_best.pth'))
-    # 返回最佳test得分，平均总得分，平均奖励回报，平均碰到障碍次数，平均结束距离
+    # writer.close()
+    # if is_log:
+    #     wandb.save(os.path.join(output_dir, 'actor_best.pth'))
+    # # 返回最佳test得分，平均总得分，平均奖励回报，平均碰到障碍次数，平均结束距离
     return score100_best, sum(total_score_list)/len(total_score_list), sum(total_reward_list)/len(total_reward_list), sum(total_obstacle_list)/len(total_obstacle_list), sum(total_dist_list)/len(total_dist_list)
 
 def train_online_policy_agent(algorithm: myPPOAlgorithm, num_episodes, config, seed, is_log):
@@ -220,7 +217,7 @@ def train_online_policy_agent(algorithm: myPPOAlgorithm, num_episodes, config, s
                     _ = env.step(action)
                     new_state = algorithm.preprocess_state(env.get_observation()[0])
                     done = env.terminated
-                    reward = algorithm.reward_total_11_6(env.get_dis(), pre_dist, env.is_obstacle_contact(), total_obstacle, env.get_step_now(), env.get_score())
+                    reward = algorithm.reward_total_13_test(env.get_dis(), pre_dist, env.is_obstacle_contact(), total_obstacle, env.get_step_now(), env.get_score())
                     transition_dict['states'].append(state)
                     transition_dict['actions'].append(action)
                     transition_dict['next_states'].append(new_state)
@@ -236,9 +233,6 @@ def train_online_policy_agent(algorithm: myPPOAlgorithm, num_episodes, config, s
                     if (env.is_obstacle_contact()):
                         total_obstacle += 1
                         # break
-                
-                for key in replay_buffer.keys():
-                    replay_buffer[key].extend(transition_dict[key])
 
                 total_reward_list.append(total_reward)
                 total_score_list.append(score)
@@ -246,9 +240,7 @@ def train_online_policy_agent(algorithm: myPPOAlgorithm, num_episodes, config, s
                 total_dist_list.append(env.get_dis())
                 actor_loss = 0
                 critic_loss = 0
-                if len(replay_buffer['states']) >= replay_buffer_size*100:
-                    batch = {k: list(replay_buffer[k]) for k in replay_buffer.keys()}
-                    actor_loss, critic_loss = algorithm.update(batch)
+                actor_loss, critic_loss, actor_lr, critic_lr = algorithm.update(transition_dict)
                 print(f"Train_{epoch} completed. steps:", env.step_num, "Distance:", env.get_dis(), "Score:", score, "Reward:", total_reward, "n_Obstacle: ", total_obstacle, "Actor Loss:", actor_loss, "Critic Loss:", critic_loss)
 
                 # Tensorboard logging
@@ -259,15 +251,17 @@ def train_online_policy_agent(algorithm: myPPOAlgorithm, num_episodes, config, s
                     writer.add_scalar('Score', score, epoch)
                     writer.add_scalar('End Distance', env.get_dis(), epoch)
                     writer.add_scalar('Obstacle Contact Num', total_obstacle, epoch)
-                    import wandb
-                    wandb.log({
-                        'Actor Loss': actor_loss,
-                        'Critic Loss': critic_loss,
-                        'Total Reward': total_reward,
-                        'Score': score,
-                        'End Distance': env.get_dis(),
-                        'Obstacle Contact Num': total_obstacle
-                    })
+                    writer.add_scalar('Actor LR', actor_lr, epoch)
+                    writer.add_scalar('Critic LR', critic_lr, epoch)
+                    # import wandb
+                    # wandb.log({
+                    #     'Actor Loss': actor_loss,
+                    #     'Critic Loss': critic_loss,
+                    #     'Total Reward': total_reward,
+                    #     'Score': score,
+                    #     'End Distance': env.get_dis(),
+                    #     'Obstacle Contact Num': total_obstacle
+                    # }, step=epoch)
 
                     # model saving
                     # torch.save(algorithm.actor.state_dict(), os.path.join(os.path.dirname(__file__), 'model.pth'))  # 放个在工程根目录下方便test.py测试
@@ -313,30 +307,36 @@ def train_online_policy_agent(algorithm: myPPOAlgorithm, num_episodes, config, s
 
     env.close()
     writer.close()
-    if is_log:
-        wandb.save(os.path.join(output_dir, 'actor_best.pth'))
+    # if is_log:
+    #     wandb.save(os.path.join(output_dir, 'actor_best.pth'))
     # 返回最佳test得分，平均总得分，平均奖励回报，平均碰到障碍次数，平均结束距离
     return score100_best, sum(total_score_list)/len(total_score_list), sum(total_reward_list)/len(total_reward_list), sum(total_obstacle_list)/len(total_obstacle_list), sum(total_dist_list)/len(total_dist_list)
 
-def train_one_config(config_file_path, is_log, seed):
-    # TRY NOT TO MODIFY: seeding
+def seed_everything(seed=100):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+def train_one_config(config_file_path, is_log, seed):
+    # TRY NOT TO MODIFY: seeding
+    seed_everything(seed)
 
     with open(config_file_path, 'r') as j:
         config = json.load(j)
     
-    if is_log:
-        import wandb
-        wandb.init(
-            project="robot_test",  # 设置你的项目名称
-            sync_tensorboard=True,
-            config=config,
-            name=f"{config['config_name']}__{seed}__{datetime.now().strftime('%Y%m%d-%H%M%S')}",
-            save_code=True
-        )
+    # if is_log:
+    #     import wandb
+    #     wandb.init(
+    #         project="robot_SAC",  # 设置你的项目名称
+    #         config=config,
+    #         name=f"{config['config_name']}__{seed}__{datetime.now().strftime('%Y%m%d-%H%M%S')}",
+    #         save_code=True
+    #     )
     
     config_name = config["config_name"]
     score100 = 0
@@ -368,7 +368,12 @@ def train_one_config(config_file_path, is_log, seed):
             num_critic_hidden_layers=config["num_critic_hidden_layers"],
             actor_pretrained_model=config.get("actor_pretrained_model"),
             critic_pretrained_model=config.get("critic_pretrained_model"),
-            isTrain=True
+            isTrain=True,
+            a=config.get("a"),
+            b=config.get("b"),
+            c=config.get("c"),
+            d=config.get("d"),
+            e=config.get("e")
         )
         score100, mean_score, mean_reward, mean_obstacle, mean_end_dist = train_online_policy_agent(algorithm, config["num_episodes"], config["config_name"], seed, is_log)
         
@@ -406,8 +411,8 @@ def train_one_config(config_file_path, is_log, seed):
             seed=seed,
             is_log=is_log)
         
-    if is_log:
-        wandb.finish()
+    # if is_log:
+    #     wandb.finish()
     return config_name, score100, mean_score, mean_reward, mean_obstacle, mean_end_dist, datetime.now()
 
 
