@@ -95,7 +95,8 @@ class ValueNet(torch.nn.Module):
 class myPPOAlgorithm:
     ''' 处理连续动作的PPO算法 '''
     def __init__(self, nums_episodes, state_dim, actor_hidden_dim, critic_hidden_dim, action_dim, actor_lr, critic_lr, lmbda, epochs, eps, gamma, residual_strength, 
-                dropout, n_state_steps, device, num_actor_hidden_layers=None, num_critic_hidden_layers=None, actor_pretrained_model=None, critic_pretrained_model=None, isTrain=True):
+                dropout, n_state_steps, device, num_actor_hidden_layers=None, num_critic_hidden_layers=None, actor_pretrained_model=None, critic_pretrained_model=None, isTrain=True,
+                a=800, b=6, c=0.1, d=5, e=1):
         self.action_dim = action_dim
         self.n_state_steps = n_state_steps
         self.state_buffer = deque(maxlen=n_state_steps)
@@ -109,8 +110,24 @@ class myPPOAlgorithm:
             pass
         self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=actor_lr)
         self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=critic_lr)
-        self.actor_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.actor_optimizer, T_max=nums_episodes, eta_min=actor_lr/3)
-        self.critic_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_optimizer, T_max=nums_episodes, eta_min=critic_lr/3)
+        # self.actor_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.actor_optimizer, T_max=nums_episodes, eta_min=actor_lr/3)
+        # self.critic_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_optimizer, T_max=nums_episodes, eta_min=critic_lr/3)
+        self.actor_scheduler = optim.lr_scheduler.OneCycleLR(
+            self.actor_optimizer,
+            max_lr=actor_lr*5,
+            total_steps=nums_episodes,
+            anneal_strategy='cos',
+            cycle_momentum=True,
+            div_factor=5,    # 学习率衰减的分割因子
+        )
+        self.critic_scheduler = optim.lr_scheduler.OneCycleLR(
+            self.critic_optimizer,
+            max_lr=critic_lr*5,
+            total_steps=nums_episodes,
+            anneal_strategy='cos',
+            cycle_momentum=True,
+            div_factor=5,    # 学习率衰减的分割因子
+        )
 
         self.gamma = gamma
         self.lmbda = lmbda
@@ -124,6 +141,11 @@ class myPPOAlgorithm:
         self.arrival_reward_flag = False
         self.reward = 0
         self.pre_reward = 0
+        self.a = a if a is not None else 800
+        self.b = b if b is not None else 6
+        self.c = c if c is not None else 0.1
+        self.d = d if d is not None else 5
+        self.e = e if e is not None else 1
 
     def reset(self, init_state):
         self.is_obstacled = False
@@ -134,293 +156,27 @@ class myPPOAlgorithm:
         for _ in range(self.n_state_steps):
             self.state_buffer.append(init_state)    # use init state to fill buffer
 
-
-    # 全局奖励
-    def reward_total_9(self, dist, pre_dist, obstacle_contact, step):
-        # 1. 鼓励机械臂向目标物体前进
-        delta = (dist - pre_dist)
-        self.reward -= delta * 500
-
-        # 2. 移动时碰到障碍物
-        if obstacle_contact:
-            self.reward -= 3
-            self.is_obstacled = True
-
-        # 3. 到达奖励
-        if dist < 0.05 and step <= self.env_max_steps:
-            self.reward += 100
-            if self.is_obstacled:
-                self.reward -= 50
-        elif step >= self.env_max_steps:
-            self.reward -= (dist - 0.05) * 100
-            if self.is_obstacled:
-                self.reward -= 50
-
-        return self.reward
-    
-    # 局部奖励
-    def reward_total_9_1(self, dist, pre_dist, obstacle_contact, step):
-        reward = 0
-        # 1. 鼓励机械臂向目标物体前进
-        delta = (dist - pre_dist)
-        reward -= delta * 800
-
-        # 2. 移动时碰到障碍物
-        if obstacle_contact:
-            reward -= 6
-            self.is_obstacled = True
-
-        # 3. 到达奖励
-        if (not self.arrival_reward_flag) and (step >= self.env_max_steps or dist < 0.05):
-            if dist < 0.05:
-                # debug
-                pass
-            reward -= (dist - 0.1) * 100
-            if self.is_obstacled:
-                reward -= 50
-            self.arrival_reward_flag = True
-
-        return reward
-    def reward_total_9_2(self, dist, pre_dist, obstacle_contact, step):
-        reward = 0
-        # 1. 鼓励机械臂向目标物体前进
-        delta = (dist - pre_dist)
-        reward -= delta * 800
-
-        # 2. 移动时碰到障碍物
-        if obstacle_contact:
-            reward -= 8
-            self.is_obstacled = True
-
-        # 3. 到达奖励
-        if (not self.arrival_reward_flag) and (step >= self.env_max_steps or dist < 0.05):
-            reward -= (dist - 0.1) * 100
-            if self.is_obstacled:
-                reward -= 50
-            self.arrival_reward_flag = True
-
-        return reward
-    
-    def reward_total_9_3(self, dist, pre_dist, obstacle_contact, step):
-        reward = 0
-        # 1. 鼓励机械臂向目标物体前进
-        delta = (dist - pre_dist)
-        reward -= delta * 800
-
-        # 2. 移动时碰到障碍物
-        if obstacle_contact:
-            reward -= 5
-            self.is_obstacled = True
-
-        # 3. 到达奖励
-        if step >= self.env_max_steps or dist < 0.05:
-            arrival_reward = (0.05 - dist) * 100
-            if self.is_obstacled:
-                arrival_reward -= 25
-
-            reward += arrival_reward
-            # 鼓励以更小的时间步完成目标
-            reward += 50 - 0.5 * step
-
-        return reward
-    
-    def reward_total_10(self, dist, pre_dist, obstacle_contact, step, final_score):
-        reward = 0
-        # 1. 鼓励机械臂向目标物体前进
-        delta = (dist - pre_dist)
-        reward -= delta * 800
-
-        # 2. 移动时碰到障碍物
-        if obstacle_contact:
-            reward -= 6
-
-        # 3. 到达奖励
-        if step >= self.env_max_steps or dist < 0.05:
-            reward += final_score
-
-        return reward
-    
-    # def reward_total_10_1(self, dist, pre_dist, obstacle_contact, step, final_score):
-    #     reward = 0
-    #     # 1. 鼓励机械臂向目标物体前进
-    #     delta = (dist - pre_dist)
-    #     reward -= delta * 800
-
-    #     # 2. 移动时碰到障碍物
-    #     if obstacle_contact:
-    #         reward -= 6
-
-    #     # 3. 到达奖励
-    #     if step >= self.env_max_steps or dist < 0.05:
-    #         reward += final_score
-
-    #     # 4. 移动平均平滑奖励
-    #     reward = 0.3 * self.pre_reward + 0.7 * reward
-    #     self.pre_reward = reward
-
-    #     return reward
-    def reward_total_10_2(self, dist, pre_dist, obstacle_contact, step, final_score):
-        reward = 0
-        # 1. 鼓励机械臂向目标物体前进
-        delta = (dist - pre_dist)
-        reward -= delta * 800
-
-        # 2. 移动时碰到障碍物
-        if obstacle_contact:
-            reward -= 6
-
-        return reward
-    
-    def reward_total_10_3(self, dist, pre_dist, obstacle_contact, step, final_score):
-        reward = 0
-        # 1. 鼓励机械臂向目标物体前进
-        delta = (dist - pre_dist)
-        reward -= delta * 800
-
-        # 2. 移动时碰到障碍物
-        if obstacle_contact:
-            reward -= 8
-        
-        # 3. 添加势能函数（与1. 不同，1. 中如果每次移动距离相同，则reward也是相同的；而势能函数是越靠近目标，reward越大）
-        reward += (0.05 - dist) * 10
-
-        # 4. 到达奖励
-        if step >= self.env_max_steps or dist < 0.05:
-            reward += final_score
-
-        return reward
-
-    
-    def reward_total_10_3_1(self, dist, pre_dist, obstacle_contact, step, final_score):
-        reward = 0
-        # 1. 鼓励机械臂向目标物体前进
-        delta = (dist - pre_dist)
-        reward -= delta * 800
-
-        # 2. 移动时碰到障碍物
-        if obstacle_contact:
-            reward -= 8
-        
-        # 3. 添加势能函数（与1. 不同，1. 中如果每次移动距离相同，则reward也是相同的；而势能函数是越靠近目标，reward越大）
-        reward += (0.05 - dist) * 10
-
-        # 4. 到达奖励
-        reward /= 2
-        if step >= self.env_max_steps or dist < 0.05:
-            reward += final_score
-
-        return reward
-    
-    def reward_total_10_3_3(self, dist, pre_dist, obstacle_contact, step, final_score):
-        reward = 0
-        # 1. 鼓励机械臂向目标物体前进
-        delta = (dist - pre_dist)
-        reward -= delta * 800
-
-        # 2. 移动时碰到障碍物
-        if obstacle_contact:
-            reward -= 8
-        
-        # 3. 添加势能函数（与1. 不同，1. 中如果每次移动距离相同，则reward也是相同的；而势能函数是越靠近目标，reward越大）
-        reward += (0.05 - dist) * 10 + 5
-
-        # 4. 到达奖励
-        if step >= self.env_max_steps or dist < 0.05:
-            reward += final_score
-
-        return reward
-    
-    def reward_total_11_2(self, dist, pre_dist, obstacle_contact, n_obstacle, step, final_score):
+    def reward_total_13_test(self, dist, pre_dist, obstacle_contact, n_obstacle, step, final_score):
         reward = 0
         # 1. 鼓励机械臂向目标物体前进，1个step最大变化0.005m，dist的范围为0.05~1m
         # 范围 (-5, 5)
         delta = (dist - pre_dist)
-        reward -= delta * 1000
+        reward -= delta * self.a
 
         # 2. 移动时碰到障碍物
         if obstacle_contact:
-            reward -= 5 + n_obstacle * 0.5
-        
-        # 3. 添加势能函数，取值范围(-5, 5)
-        reward += (0.05 - dist) * 5 + 2.5
+            reward -= self.b + n_obstacle * self.c
 
-        # 4. 到达奖励, 范围为0~100
+        # 3. 添加势能函数，取值范围(0, 20)，非线性
+        reward += (1 / dist + (0.05 - dist) * 5) * self.d
+
+        # 4. 时间步惩罚 (-0.05, -5)
+        reward -= step * self.e
+
+        # 5. 到达奖励, 范围为0~100
         if step >= self.env_max_steps or dist < 0.05:
             reward += final_score
 
-        return reward
-    
-    def reward_total_11_3(self, dist, pre_dist, obstacle_contact, n_obstacle, step, final_score):
-        reward = 0
-        # 1. 鼓励机械臂向目标物体前进，1个step最大变化0.005m，dist的范围为0.05~1m
-        # 范围 (-5, 5)
-        delta = (dist - pre_dist)
-        reward -= delta * 1000
-
-        # 2. 移动时碰到障碍物
-        if obstacle_contact:
-            reward -= 8 + n_obstacle * 0.2
-
-        # 3. 到达奖励, 范围为0~100
-        if step >= self.env_max_steps or dist < 0.05:
-            reward += final_score
-
-        return reward
-    
-    def reward_total_11_4(self, dist, pre_dist, obstacle_contact, n_obstacle, step, final_score):
-        reward = 0
-        # 1. 鼓励机械臂向目标物体前进，1个step最大变化0.005m，dist的范围为0.05~1m
-        # 范围 (-5, 5)
-        delta = (dist - pre_dist)
-        reward -= delta * 800
-
-        # 2. 移动时碰到障碍物
-        if obstacle_contact:
-            reward -= 6 + n_obstacle * 0.2
-
-        # 3. 到达奖励, 范围为0~100
-        if step >= self.env_max_steps or dist < 0.05:
-            reward += final_score
-
-        return reward
-    
-    def reward_total_11_5(self, dist, pre_dist, obstacle_contact, n_obstacle, step, final_score):
-        reward = 0
-        # 1. 鼓励机械臂向目标物体前进，1个step最大变化0.005m，dist的范围为0.05~1m
-        # 范围 (-5, 5)
-        delta = (dist - pre_dist)
-        reward -= delta * 800
-
-        # 2. 移动时碰到障碍物
-        if obstacle_contact:
-            reward -= 6 + n_obstacle * 0.1
-
-        # 3. 添加势能函数，取值范围(-5, 5)
-        reward += (0.05 - dist) * 5 + 2.5
-
-        # 4. 到达奖励, 范围为0~100
-        if step >= self.env_max_steps or dist < 0.05:
-            reward += final_score
-
-        return reward
-    
-    def reward_total_11_6(self, dist, pre_dist, obstacle_contact, n_obstacle, step, final_score):
-        reward = 0
-        # 1. 鼓励机械臂向目标物体前进，1个step最大变化0.005m，dist的范围为0.05~1m
-        # 范围 (-5, 5)
-        delta = (dist - pre_dist)
-        reward -= delta * 500
-
-        # 2. 移动时碰到障碍物
-        if obstacle_contact:
-            reward -= 5 + n_obstacle * 0.1
-
-        # 3. 添加势能函数，取值范围(-5, 5)
-        reward += (0.05 - dist) * 5 + 2.5
-
-        # 4. 到达奖励, 范围为0~100
-        if step >= self.env_max_steps or dist < 0.05:
-            reward += final_score
 
         return reward
 
@@ -519,4 +275,4 @@ class myPPOAlgorithm:
         # lr decay
         self.actor_scheduler.step()
         self.critic_scheduler.step()
-        return actor_loss.item(), critic_loss.item()
+        return actor_loss.item(), critic_loss.item(), self.actor_scheduler.get_last_lr()[0], self.critic_scheduler.get_last_lr()[0]
