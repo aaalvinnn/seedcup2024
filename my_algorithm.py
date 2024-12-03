@@ -110,24 +110,24 @@ class myPPOAlgorithm:
             pass
         self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=actor_lr)
         self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=critic_lr)
-        # self.actor_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.actor_optimizer, T_max=nums_episodes, eta_min=actor_lr/3)
-        # self.critic_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_optimizer, T_max=nums_episodes, eta_min=critic_lr/3)
-        self.actor_scheduler = optim.lr_scheduler.OneCycleLR(
-            self.actor_optimizer,
-            max_lr=actor_lr*5,
-            total_steps=nums_episodes,
-            anneal_strategy='cos',
-            cycle_momentum=True,
-            div_factor=5,    # 学习率衰减的分割因子
-        )
-        self.critic_scheduler = optim.lr_scheduler.OneCycleLR(
-            self.critic_optimizer,
-            max_lr=critic_lr*5,
-            total_steps=nums_episodes,
-            anneal_strategy='cos',
-            cycle_momentum=True,
-            div_factor=5,    # 学习率衰减的分割因子
-        )
+        self.actor_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.actor_optimizer, T_max=nums_episodes, eta_min=actor_lr/3)
+        self.critic_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_optimizer, T_max=nums_episodes, eta_min=critic_lr/3)
+        # self.actor_scheduler = optim.lr_scheduler.OneCycleLR(
+        #     self.actor_optimizer,
+        #     max_lr=actor_lr*5,
+        #     total_steps=nums_episodes,
+        #     anneal_strategy='cos',
+        #     cycle_momentum=True,
+        #     div_factor=5,    # 学习率衰减的分割因子
+        # )
+        # self.critic_scheduler = optim.lr_scheduler.OneCycleLR(
+        #     self.critic_optimizer,
+        #     max_lr=critic_lr*5,
+        #     total_steps=nums_episodes,
+        #     anneal_strategy='cos',
+        #     cycle_momentum=True,
+        #     div_factor=5,    # 学习率衰减的分割因子
+        # )
 
         self.gamma = gamma
         self.lmbda = lmbda
@@ -146,6 +146,8 @@ class myPPOAlgorithm:
         self.c = c if c is not None else 0.1
         self.d = d if d is not None else 5
         self.e = e if e is not None else 1
+        self.max_epochs = nums_episodes
+        self.epoch = 0
 
     def reset(self, init_state):
         self.is_obstacled = False
@@ -155,6 +157,7 @@ class myPPOAlgorithm:
         self.state_buffer.clear()
         for _ in range(self.n_state_steps):
             self.state_buffer.append(init_state)    # use init state to fill buffer
+        self.epoch += 1
 
     def reward_total_13_test(self, dist, pre_dist, obstacle_contact, n_obstacle, step, final_score):
         reward = 0
@@ -177,6 +180,32 @@ class myPPOAlgorithm:
         if step >= self.env_max_steps or dist < 0.05:
             reward += final_score
 
+        return reward
+    
+    def reward_total_13_1_test(self, dist, pre_dist, obstacle_contact, n_obstacle, step, final_score):
+        reward = 0
+        # 1. 鼓励机械臂向目标物体前进，1个step最大变化0.005m，dist的范围为0.05~1m
+        # 范围 (-5, 5)
+        delta = (dist - pre_dist)
+        reward -= delta * self.a
+
+        # 2. 移动时碰到障碍物
+        if obstacle_contact:
+            reward -= self.b + n_obstacle * self.c
+
+        # 3. 添加势能函数，取值范围(-2.5, 2.5)，线性
+        reward += (0.05 - dist) * 3
+
+        # 4. 余弦衰减
+        self.d = (1 + math.cos(math.pi * self.epoch / self.max_epochs)) / 2
+        reward *= self.d
+
+        # 4. 时间步惩罚 (-0.05, -5)
+        reward -= step * self.e
+
+        # 5. 到达奖励, 范围为0~100
+        if step >= self.env_max_steps or dist < 0.05:
+            reward += final_score
 
         return reward
 

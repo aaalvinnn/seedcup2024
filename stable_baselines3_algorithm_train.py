@@ -12,7 +12,7 @@ from gymnasium import spaces
 import torch
 
 class myTrainingEnv(gym.Env):
-    def __init__(self,is_senior,seed, gui=False):
+    def __init__(self,is_senior,seed, nums_episodes, gui=False):
         super(myTrainingEnv, self).__init__()
         self.observation_space = spaces.Box(low=0, high=1, shape=(1, 12), dtype=np.float32)
         self.action_space = spaces.Box(low=-1, high=1, shape=(6, ), dtype=np.float32)
@@ -24,6 +24,9 @@ class myTrainingEnv(gym.Env):
         self.p = bullet_client.BulletClient(connection_mode=p.GUI if gui else p.DIRECT)
         self.p.setGravity(0, 0, -9.81)
         self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
+        self.obstacles = 0
+        self.max_epochs = nums_episodes
+        self.epoch = 0
         self.init_env()
 
     def init_env(self):
@@ -42,6 +45,8 @@ class myTrainingEnv(gym.Env):
         self.step_num = 0
         self.success_reward = 0
         self.training_reward = 0
+        self.obstacles = 0
+        self.epoch += 1
         self.terminated = False
         self.obstacle_contact = False
         neutral_angle = [-49.45849125928217, -57.601209583849, -138.394013961943, -164.0052115563118, -49.45849125928217, 0, 0, 0]
@@ -158,6 +163,7 @@ class myTrainingEnv(gym.Env):
         for contact_point in table_contact_points or obstacle1_contact_points:
             link_index = contact_point[3]
             if link_index not in [0, 1]:
+                self.obstacles += 1
                 return True
             
         return False
@@ -189,27 +195,26 @@ class myTrainingEnv(gym.Env):
 
     #     return reward
     def get_reward(self):
+        reward = 0
         dist = self.get_dis()
         # 1. 鼓励机械臂向目标物体前进
         delta = (dist - self.pre_dist)
-        self.training_reward -= delta * 500
+        reward -= delta * 800
         self.pre_dist = dist
 
         # 2. 移动时碰到障碍物
         if self.is_obstacle_contact():
-            self.training_reward -= 3
+            reward -= 6 + self.obstacles * 0.15
 
-        # 3. 到达奖励
-        if dist < 0.05 and self.step_num <= self.max_steps:
-            self.training_reward += 100
-            if self.obstacle_contact:
-                self.training_reward -= 50
-        elif self.step_num >= self.max_steps:
-            self.training_reward -= (dist - 0.05) * 100
-            if self.obstacle_contact:
-                self.training_reward -= 50
+        # 3. 余弦衰减
+        if self.epoch >= self.max_epochs / 2:
+            reward *= (1 + math.cos(math.pi * (self.epoch-self.max_epochs / 2) / self.max_epochs)) / 2
 
-        return self.training_reward
+        # 4. 到达奖励
+        if dist < 0.05 or self.step_num <= self.max_steps:
+            reward += self.success_reward
+
+        return reward
 
 def train(env: myTrainingEnv, nums_episodes):
     # 创建 PPO 模型
@@ -239,8 +244,9 @@ def model_output(output_path):
     torch.save(policy_net.state_dict(), os.path.join(output_path, "model.pth"))
 
 if __name__ == "__main__":
-    env = myTrainingEnv(is_senior=True, seed=100)
-    train(env, 1000)
+    nums_episodes = 1200
+    env = myTrainingEnv(is_senior=True, seed=100, nums_episodes=nums_episodes)
+    train(env, nums_episodes)
     # test(env)
     # model_output("pretrained_models/PPO-13")
 

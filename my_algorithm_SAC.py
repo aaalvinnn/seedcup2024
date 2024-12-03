@@ -3,6 +3,7 @@ import torch.nn.functional as F
 import numpy as np
 import torch.optim as optim
 import random
+import math
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     torch.nn.init.orthogonal_(layer.weight, std)
@@ -95,33 +96,33 @@ class mySACAlgorithm:
                                                    lr=critic_lr)
         self.critic_2_optimizer = torch.optim.AdamW(self.critic_2.parameters(),
                                                    lr=critic_lr)
-        # self.actor_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.actor_optimizer, T_max=nums_episodes, eta_min=actor_lr/3)
-        # self.critic_1_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_1_optimizer, T_max=nums_episodes, eta_min=critic_lr/3)
-        # self.critic_2_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_2_optimizer, T_max=nums_episodes, eta_min=critic_lr/3)
-        self.actor_scheduler = optim.lr_scheduler.OneCycleLR(
-            self.actor_optimizer,
-            max_lr=actor_lr*5,
-            total_steps=nums_episodes*100,
-            anneal_strategy='cos',
-            cycle_momentum=True,
-            div_factor=5,    # 学习率衰减的分割因子
-        )
-        self.critic_1_scheduler = optim.lr_scheduler.OneCycleLR(
-            self.critic_1_optimizer,
-            max_lr=critic_lr*5,
-            total_steps=nums_episodes*100,
-            anneal_strategy='cos',
-            cycle_momentum=True,
-            div_factor=5,    # 学习率衰减的分割因子
-        )
-        self.critic_2_scheduler = optim.lr_scheduler.OneCycleLR(
-            self.critic_2_optimizer,
-            max_lr=critic_lr*5,
-            total_steps=nums_episodes*100,
-            anneal_strategy='cos',
-            cycle_momentum=True,
-            div_factor=5,    # 学习率衰减的分割因子
-        )
+        self.actor_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.actor_optimizer, T_max=nums_episodes*100, eta_min=actor_lr/3)
+        self.critic_1_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_1_optimizer, T_max=nums_episodes*100, eta_min=critic_lr/3)
+        self.critic_2_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_2_optimizer, T_max=nums_episodes*100, eta_min=critic_lr/3)
+        # self.actor_scheduler = optim.lr_scheduler.OneCycleLR(
+        #     self.actor_optimizer,
+        #     max_lr=actor_lr*5,
+        #     total_steps=nums_episodes*100,
+        #     anneal_strategy='cos',
+        #     cycle_momentum=True,
+        #     div_factor=5,    # 学习率衰减的分割因子
+        # )
+        # self.critic_1_scheduler = optim.lr_scheduler.OneCycleLR(
+        #     self.critic_1_optimizer,
+        #     max_lr=critic_lr*5,
+        #     total_steps=nums_episodes*100,
+        #     anneal_strategy='cos',
+        #     cycle_momentum=True,
+        #     div_factor=5,    # 学习率衰减的分割因子
+        # )
+        # self.critic_2_scheduler = optim.lr_scheduler.OneCycleLR(
+        #     self.critic_2_optimizer,
+        #     max_lr=critic_lr*5,
+        #     total_steps=nums_episodes*100,
+        #     anneal_strategy='cos',
+        #     cycle_momentum=True,
+        #     div_factor=5,    # 学习率衰减的分割因子
+        # )
 
         # 使用alpha的log值,可以使训练结果比较稳定
         self.log_alpha = torch.tensor(np.log(0.01), dtype=torch.float)
@@ -138,82 +139,14 @@ class mySACAlgorithm:
         self.c = c if c is not None else 0.1
         self.d = d if d is not None else 5
         self.e = e if e is not None else 1
+        self.max_epochs = nums_episodes
+        self.epoch = 0
 
     def reset(self, init_state, seed):
         self.reward = 0
         self.pre_reward = 0
         # seed_everything(seed)
-        
-    def reward_total_12_test(self, dist, pre_dist, obstacle_contact, n_obstacle, step, final_score):
-        reward = 0
-        # 1. 鼓励机械臂向目标物体前进，1个step最大变化0.005m，dist的范围为0.05~1m
-        # 范围 (-5, 5)
-        delta = (dist - pre_dist)
-        reward -= delta * self.a
-
-        # 2. 移动时碰到障碍物
-        if obstacle_contact:
-            reward -= self.b + n_obstacle * self.c
-
-        # 3. 添加势能函数，取值范围(0, 20)，非线性
-        reward += 1 / dist * self.d
-
-
-        # 4. 衰减reward shaping
-        reward *= self.e
-
-        # 5. 到达奖励, 范围为0~100
-        if step >= self.env_max_steps or dist < 0.05:
-            reward += final_score
-
-        return reward
-    
-    def reward_total_13_test(self, dist, pre_dist, obstacle_contact, n_obstacle, step, final_score):
-        reward = 0
-        # 1. 鼓励机械臂向目标物体前进，1个step最大变化0.005m，dist的范围为0.05~1m
-        # 范围 (-5, 5)
-        delta = (dist - pre_dist)
-        reward -= delta * self.a
-
-        # 2. 移动时碰到障碍物
-        if obstacle_contact:
-            reward -= self.b + n_obstacle * self.c
-
-        # 3. 添加势能函数，取值范围(0, 20)，非线性
-        reward += (1 / dist + (0.05 - dist) * 5) * self.d
-
-        # 4. 时间步惩罚 (-0.05, -5)
-        reward -= step * self.e
-
-        # 5. 到达奖励, 范围为0~100
-        if step >= self.env_max_steps or dist < 0.05:
-            reward += final_score
-
-
-        return reward
-
-    def preprocess_state(self, state):
-        return state
-
-        jixiebi_state = state[:6]
-        dest_stateX, dest_stateY, dest_stateZ = state[6:9]
-        obstacle_stateX, obstacle_stateY, obstacle_stateZ = state[9:]
-
-        dest_stateX = (dest_stateX - (-0.2)) / (0.2 - (-0.2))
-        dest_stateY = (dest_stateY - (0.8)) / (0.9 - 0.8)
-        dest_stateZ = (dest_stateZ - (0.1)) / (0.3 - 0.1)
-
-        obstacle_stateX = (obstacle_stateX - (-0.4)) / (0.4 - (-0.4))
-        obstacle_stateY = obstacle_stateY
-        obstacle_stateZ = (obstacle_stateZ - (0.1)) / (0.3 - 0.1)
-
-        return np.concatenate([jixiebi_state, [dest_stateX], [dest_stateY], [dest_stateZ], [obstacle_stateX], [obstacle_stateY], [obstacle_stateZ]])
-
-    def get_action(self, state):
-        state = np.concatenate([state], axis=-1)
-        state = torch.tensor([state], dtype=torch.float).to(self.device)
-        action = self.actor(state)[0]
-        return np.array(action.squeeze(0).tolist()) 
+        self.epoch += 1
 
     def calc_target(self, rewards, next_states, dones):  # 计算目标Q值
         next_actions, log_prob = self.actor(next_states)
@@ -282,3 +215,101 @@ class mySACAlgorithm:
         self.critic_2_scheduler.step()
 
         return actor_loss.item(), alpha_loss.item(), self.actor_scheduler.get_last_lr()[0], self.critic_1_scheduler.get_last_lr()[0], self.critic_2_scheduler.get_last_lr()[0]
+    
+    def reward_total_12_test(self, dist, pre_dist, obstacle_contact, n_obstacle, step, final_score):
+        reward = 0
+        # 1. 鼓励机械臂向目标物体前进，1个step最大变化0.005m，dist的范围为0.05~1m
+        # 范围 (-5, 5)
+        delta = (dist - pre_dist)
+        reward -= delta * self.a
+
+        # 2. 移动时碰到障碍物
+        if obstacle_contact:
+            reward -= self.b + n_obstacle * self.c
+
+        # 3. 添加势能函数，取值范围(0, 20)，非线性
+        reward += 1 / dist * self.d
+
+
+        # 4. 衰减reward shaping
+        reward *= self.e
+
+        # 5. 到达奖励, 范围为0~100
+        if step >= self.env_max_steps or dist < 0.05:
+            reward += final_score
+
+        return reward
+    
+    def reward_total_13_test(self, dist, pre_dist, obstacle_contact, n_obstacle, step, final_score):
+        reward = 0
+        # 1. 鼓励机械臂向目标物体前进，1个step最大变化0.005m，dist的范围为0.05~1m
+        # 范围 (-5, 5)
+        delta = (dist - pre_dist)
+        reward -= delta * self.a
+
+        # 2. 移动时碰到障碍物
+        if obstacle_contact:
+            reward -= self.b + n_obstacle * self.c
+
+        # 3. 添加势能函数，取值范围(0, 20)，非线性
+        reward += (1 / dist + (0.05 - dist) * 5) * self.d
+
+        # 4. 时间步惩罚 (-0.05, -5)
+        reward -= step * self.e
+
+        # 5. 到达奖励, 范围为0~100
+        if step >= self.env_max_steps or dist < 0.05:
+            reward += final_score
+
+
+        return reward
+    
+    def reward_total_13_1_test(self, dist, pre_dist, obstacle_contact, n_obstacle, step, final_score):
+        reward = 0
+        # 1. 鼓励机械臂向目标物体前进，1个step最大变化0.005m，dist的范围为0.05~1m
+        # 范围 (-5, 5)
+        delta = (dist - pre_dist)
+        reward -= delta * self.a
+
+        # 2. 移动时碰到障碍物
+        if obstacle_contact:
+            reward -= self.b + n_obstacle * self.c
+
+        # 3. 添加势能函数，取值范围(-2.5, 2.5)，线性
+        reward += (0.05 - dist) * 3
+
+        # 4. 衰减   SAC不能余弦衰减，因为经验重放
+        # self.d = (1 + math.cos(math.pi * self.epoch / self.max_epochs)) / 2
+        reward *= self.d
+
+        # 4. 时间步惩罚 (-0.05, -5)
+        reward -= step * self.e
+
+        # 5. 到达奖励, 范围为0~100
+        if step >= self.env_max_steps or dist < 0.05:
+            reward += final_score
+
+        return reward
+
+    def preprocess_state(self, state):
+        return state
+
+        jixiebi_state = state[:6]
+        dest_stateX, dest_stateY, dest_stateZ = state[6:9]
+        obstacle_stateX, obstacle_stateY, obstacle_stateZ = state[9:]
+
+        dest_stateX = (dest_stateX - (-0.2)) / (0.2 - (-0.2))
+        dest_stateY = (dest_stateY - (0.8)) / (0.9 - 0.8)
+        dest_stateZ = (dest_stateZ - (0.1)) / (0.3 - 0.1)
+
+        obstacle_stateX = (obstacle_stateX - (-0.4)) / (0.4 - (-0.4))
+        obstacle_stateY = obstacle_stateY
+        obstacle_stateZ = (obstacle_stateZ - (0.1)) / (0.3 - 0.1)
+
+        return np.concatenate([jixiebi_state, [dest_stateX], [dest_stateY], [dest_stateZ], [obstacle_stateX], [obstacle_stateY], [obstacle_stateZ]])
+
+    def get_action(self, state):
+        state = np.concatenate([state], axis=-1)
+        state = torch.tensor([state], dtype=torch.float).to(self.device)
+        action = self.actor(state)[0]
+        return np.array(action.squeeze(0).tolist()) 

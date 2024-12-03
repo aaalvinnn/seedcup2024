@@ -34,9 +34,9 @@ class ReplayBuffer:
     def size(self): 
         return len(self.buffer)
 
-def env_step_log(env: Env, action, reward, obstacle_contact):
-    print(f"Step: {env.step_num}, dest_dist: {env.get_dis()}, is_Obstacle: {obstacle_contact}, Reward: {reward}\n\
-        State: {env.get_observation()[0]}\nAction: {action}\n")
+def env_step_log(env: Env, action, reward, obstacle_contact, agent):
+    print(f"Step: {env.step_num}, dest_dist: {env.get_dis()}, is_Obstacle: {obstacle_contact}, Reward: {reward}, reward_Decay: {agent.d}")
+        # State: {env.get_observation()[0]}\nAction: {action}\n")
 
 
 def train_offline_policy_agent(algorithm: mySACAlgorithm, num_episodes, replay_buffer_size, minimal_size, batch_size, config, seed, is_log):
@@ -84,7 +84,7 @@ def train_offline_policy_agent(algorithm: mySACAlgorithm, num_episodes, replay_b
                     new_state = algorithm.preprocess_state(env.get_observation()[0])
                     done = env.terminated
                     # reward = reward_algorithm.reward_total_8_1_1(env.get_dis(), pre_dist, env.is_obstacle_contact(), env.get_step_now())
-                    reward = algorithm.reward_total_13_test(env.get_dis(), pre_dist, env.is_obstacle_contact(), total_obstacle, env.get_step_now(), env.get_score())
+                    reward = algorithm.reward_total_13_1_test(env.get_dis(), pre_dist, env.is_obstacle_contact(), total_obstacle, env.get_step_now(), env.get_score())
                     replay_buffer.add(state, action, reward, new_state, done)
                     total_reward += reward
                     score += env.success_reward
@@ -96,7 +96,7 @@ def train_offline_policy_agent(algorithm: mySACAlgorithm, num_episodes, replay_b
                         actor_loss, alpha_loss, actor_lr, critic_lr, _ = algorithm.update(transition_dict)
 
                     if is_log:
-                        env_step_log(env, action, reward, env.is_obstacle_contact())
+                        env_step_log(env, action, reward, env.is_obstacle_contact(), algorithm)
                         writer.add_scalar('Actor Loss', actor_loss, (epoch-1)*100+env.get_step_now())
                         writer.add_scalar('Alpha Loss', alpha_loss, (epoch-1)*100+env.get_step_now())
                         writer.add_scalar('Actor LR', actor_lr, (epoch-1)*100+env.get_step_now())
@@ -217,7 +217,7 @@ def train_online_policy_agent(algorithm: myPPOAlgorithm, num_episodes, config, s
                     _ = env.step(action)
                     new_state = algorithm.preprocess_state(env.get_observation()[0])
                     done = env.terminated
-                    reward = algorithm.reward_total_13_test(env.get_dis(), pre_dist, env.is_obstacle_contact(), total_obstacle, env.get_step_now(), env.get_score())
+                    reward = algorithm.reward_total_13_1_test(env.get_dis(), pre_dist, env.is_obstacle_contact(), total_obstacle, env.get_step_now(), env.get_score())
                     transition_dict['states'].append(state)
                     transition_dict['actions'].append(action)
                     transition_dict['next_states'].append(new_state)
@@ -228,7 +228,7 @@ def train_online_policy_agent(algorithm: myPPOAlgorithm, num_episodes, config, s
                     pre_dist = env.get_dis()
                     state = new_state
                     if is_log:
-                        env_step_log(env, action, reward, env.is_obstacle_contact())
+                        env_step_log(env, action, reward, env.is_obstacle_contact(), algorithm)
 
                     if (env.is_obstacle_contact()):
                         total_obstacle += 1
