@@ -3,7 +3,7 @@ from team_algorithm import PPOAlgorithm, MyCustomAlgorithm
 import time
 
 def main(algorithm):
-    env = Env(is_senior=True,seed=100,gui=False)
+    env = Env(is_senior=True,seed=1,gui=False)
     done = False
     num_episodes = 100
     final_score = 0
@@ -27,10 +27,10 @@ def main(algorithm):
         total_steps += env.step_num
         total_distance += env.get_dis()
         final_score += score
-        if env.is_obstacle_contact():
+        if env.obstacle_contact:
             total_obstacle += 1
 
-        print(f"Test_{i} completed. steps:", env.step_num, "Distance:", env.get_dis(), "Score:", score, "Obstacle:", env.is_obstacle_contact())
+        print(f"Test_{i} completed. steps:", env.step_num, "Distance:", env.get_dis(), "Score:", score, "Obstacle:", env.obstacle_contact)
 
     final_score /= num_episodes
     avg_distance = total_distance / num_episodes

@@ -13,29 +13,40 @@ import torch
 from datetime import datetime
 import sys
 from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.callbacks import EvalCallback
 import argparse
+import copy
+from collections import deque
 
 class myTrainingEnv(gym.Env):
-    def __init__(self, num_episodes, is_senior, seed, is_log=True, gui=False):
+    def __init__(self, num_episodes, n_state_steps, is_senior, seed, is_log=True, gui=False):
         super(myTrainingEnv, self).__init__()
-        self.observation_space = spaces.Box(low=0, high=1, shape=(1, 12), dtype=np.float32)
+        # 多步观测
+        self.n_state_steps = n_state_steps
+        self.state_buffer = deque(maxlen=self.n_state_steps)
+        # 训练配置
+        self.observation_space = spaces.Box(low=0, high=1, shape=(self.n_state_steps, 12), dtype=np.float32)
         self.action_space = spaces.Box(low=-1, high=1, shape=(6, ), dtype=np.float32)
         self.seed = seed
         self.is_senior = is_senior
         self.is_log = is_log
         self.step_num = 0
         self.max_steps = 200
+        # 下面为log所用的变量
         self.success_reward = 0
+        self.score = 0  # 在reset的时候不更新，通过抽样来保存每轮的score
+        self.final_n_obstacles = 0
+        self.final_dist = 0
+        self.episode_reward = []
         # 下面为计算reward所用的变量
         self.epoch = 0
         self.n_obstacles = 0
-        self.success_reward = 0
         self.max_epoch = num_episodes
         self.pre_dist = 0
         # log
         if is_log:
             cur_time = datetime.now()
-            output_fir_name = os.path.join("output", cur_time.strftime("%m%d"), cur_time.strftime("%H%M"))
+            output_fir_name = os.path.join("output", cur_time.strftime("%m%d"), cur_time.strftime("%H%M") + f"_n_steps-{self.n_state_steps}")
             self.output_dir = os.path.join(os.path.dirname(__file__), output_fir_name)
             if not os.path.exists(self.output_dir):
                 os.makedirs(self.output_dir)
@@ -68,6 +79,7 @@ class myTrainingEnv(gym.Env):
         self.epoch += 1
         self.step_num = 0
         self.success_reward = 0
+        self.episode_reward.clear()
         self.training_reward = 0
         self.terminated = False
         self.obstacle_contact = False
@@ -92,8 +104,14 @@ class myTrainingEnv(gym.Env):
             self.p.stepSimulation()
 
         self.pre_dist = self.get_dis()
+
+        obs = self.get_observation()
+        for _ in range(self.n_state_steps):
+            self.state_buffer.append(obs)    # use init state to fill buffer
+        init_state = np.concatenate(list(self.state_buffer), axis=0)
         
-        return self.get_observation(), {}
+        # return self.get_observation(), {}
+        return init_state, {}
 
     def get_observation(self):
         joint_angles = [self.p.getJointState(self.fr5, i)[0] * 180 / np.pi for i in range(1, 7)]
@@ -113,11 +131,13 @@ class myTrainingEnv(gym.Env):
         fr5_joint_angles = np.array(joint_angles) + (np.array(action[:6]) / 180 * np.pi)
         gripper = np.array([0, 0])
         angle_now = np.hstack([fr5_joint_angles, gripper])
-        self.reward()
+        # self.reward()
         self.p.setJointMotorControlArray(self.fr5, [1, 2, 3, 4, 5, 6, 8, 9], p.POSITION_CONTROL, targetPositions=angle_now)
 
         for _ in range(20):
             self.p.stepSimulation()
+
+        self.reward()
 
         # 检查目标位置并反向速度
         target_position = self.p.getBasePositionAndOrientation(self.target)[0]
@@ -127,15 +147,25 @@ class myTrainingEnv(gym.Env):
             self.p.resetBaseVelocity(self.target, linearVelocity=[self.random_velocity[0], 0, -self.random_velocity[1]])
 
         observation = self.get_observation()
+        self.state_buffer.append(observation)
+        state = np.concatenate(list(self.state_buffer), axis=0)
         reward = self.get_reward()
+        self.episode_reward.append(reward)
         done = self.terminated
 
         if self.is_log:
             sys.stdout = self.log_file
             print(f"Epoch: {self.epoch}, Step: {self.step_num}, Dist: {self.get_dis()}, Obstacle: {self.is_obstacle_contact()}, Reward: {reward}")
+            if done:
+                print(f"Epoch: {self.epoch}, Score: {self.score}, Total_reward: {np.mean(self.episode_reward)}, Obstacles: {self.final_n_obstacles}")
             sys.stdout = sys.__stdout__
+        
+        if done:
+            self.score = self.success_reward
+            self.final_n_obstacles = self.n_obstacles
+            self.final_dist = self.get_dis()
 
-        return observation, reward, done, False, {}
+        return state, reward, done, False, {}
 
     def get_dis(self):
         gripper_pos = self.p.getLinkState(self.fr5, 6)[0]
@@ -182,7 +212,6 @@ class myTrainingEnv(gym.Env):
                     
             self.terminated = True
 
-
     def reset_episode(self):
         self.reset()
         return self.step_num, self.get_dis()
@@ -209,6 +238,9 @@ class myTrainingEnv(gym.Env):
             
         return False
     
+    def get_n_obstacles(self):
+        return self.n_obstacles
+    
     def get_step_now(self):
         return self.step_num
 
@@ -222,12 +254,15 @@ class myTrainingEnv(gym.Env):
 
         # 2. 移动时碰到障碍物
         if self.is_obstacle_contact():
-            reward -= 5 + self.n_obstacles * 0.05
+            reward -= 6 + self.n_obstacles * 0.06
             self.n_obstacles += 1
 
-        # 3. 到达奖励
+        # 3. 添加势能函数，取值范围(-2.5, 2.5)
+        reward += (0.05 - dist) * 5 + 2.5
+
+        # 4. 到达奖励
         if dist < 0.05 or self.step_num >= self.max_steps:
-            reward += self.success_reward - self.step_num * 0.1
+            reward += self.success_reward - self.step_num * 0.02
 
         return reward
 
@@ -253,26 +288,129 @@ class TensorboardCallback(BaseCallback):
     Custom callback for plotting additional values in tensorboard.
     """
 
-    def __init__(self, verbose=1):
+    def __init__(self, log_freq, verbose=1):
         super().__init__(verbose)
+        self.log_freq = log_freq
+        self.episode_score = []
+        self.episode_obstacles = []
+        self.episode_dist = []
+        self.best_score = 0
 
     def _on_step(self) -> bool:
-        score = self.training_env.get_attr('success_reward')[0]
-        self.logger.record("rollout/final_score", score)
+        if self.locals["dones"][0]:
+            score = self.training_env.get_attr('score')[0]
+            n_obstacles = self.training_env.get_attr('final_n_obstacles')[0]
+            final_dist = self.training_env.get_attr('final_dist')[0]
+            self.episode_score.append(score)
+            self.episode_obstacles.append(n_obstacles)
+            self.episode_dist.append(final_dist)
+            # print(f"Final Score: {score}")
+        if self.num_timesteps % self.log_freq == 0 and len(self.episode_score) > 0:
+            self.logger.record("rollout/final_score", np.mean(self.episode_score))
+            self.logger.record("rollout/final_obstacles", np.mean(self.episode_obstacles))
+            self.logger.record("rollout/final_dist", np.mean(self.episode_dist))
+
+            if np.mean(self.episode_score) >= self.best_score:
+                self.best_score = np.mean(self.episode_score)
+                output_dir = self.training_env.get_attr('output_dir')[0]
+                self.model.save(f"{output_dir}/best_score_model.zip")
+
+            self.episode_score.clear()
+            self.episode_obstacles.clear()
+            self.episode_dist.clear()
+
         return True
 
-def cosine_decay(progress):
-    lr = 3e-4 * 0.5 * (1 + math.cos(math.pi * (1-progress)))
+class CustomEpochEvalCallback(BaseCallback):
+    def __init__(self, eval_env, eval_freq, eval_epochs, verbose=0):
+        super().__init__(verbose)
+        self.eval_env = eval_env
+        self.eval_freq = eval_freq
+        self.eval_epochs = eval_epochs
+        self.episode_rewards = []  # 用于存储奖励
+        self.episode_score = []     # 用于计算最终得分
+        self.episode_obstacles = [] # 用于计算障碍物数量
+        self.episode_n_steps = []   # 用于计算步数
+        self.best_ave_reward = 0
+
+    def _on_step(self) -> bool:
+        # 检查是否达到评估周期
+        if self.num_timesteps % self.eval_freq == 0:
+            print(f"Evaluating at step: {self.num_timesteps}")
+            for i in range(self.eval_epochs):
+                # print(f"Evaluating epoch: {i}")
+                score = 0
+                total_reward = 0
+                total_obstacle = 0
+                done = False
+                obs, _ = self.eval_env.reset()
+
+                while not done:
+                    action, _ = self.model.predict(obs, deterministic=True)
+                    obs, reward, done, _, info = self.eval_env.step(action)
+                    total_reward += reward
+                    score += self.eval_env.get_score()
+                    if self.eval_env.is_obstacle_contact():
+                        total_obstacle += 1
+                
+                self.episode_rewards.append(total_reward)
+                self.episode_score.append(score)
+                self.episode_obstacles.append(total_obstacle)
+                self.episode_n_steps.append(self.eval_env.get_step_now())
+
+
+            # 你可以根据需要记录到tensorboard或日志中
+            self.logger.record('eval/epoch_reward', np.mean(self.episode_rewards))
+            self.logger.record('eval/epoch_score', np.mean(self.episode_score))
+            self.logger.record('eval/epoch_obstacle', np.mean(self.episode_obstacles))
+
+            # save model
+            if np.mean(self.episode_rewards) >= self.best_ave_reward:
+                self.best_ave_reward = np.mean(self.episode_rewards)
+                output_dir = self.training_env.get_attr('output_dir')[0]
+                self.model.save(f"{output_dir}/best_eval_reward_model.zip")
+
+            self.episode_rewards.clear()
+            self.episode_score.clear()
+            self.episode_obstacles.clear()
+            self.episode_n_steps.clear()
+        
+        return True
+    
+def cosine_decay(progress, max_lr=6e-4, min_lr=3e-4):
+    """
+    使用余弦衰减算法计算学习率，最大值为 `max_lr`，最小值为 `min_lr`。
+    
+    :param progress: 进度值，范围 [0, 1]，表示训练的进度。
+    :param max_lr: 最大学习率。
+    :param min_lr: 最小学习率。
+    :return: 根据余弦衰减计算的学习率。
+    """
+
+    lr = min_lr + (max_lr - min_lr) * 0.5 * (1 + math.cos(math.pi * (1 - progress)))
     return lr
 
-def train(env: myTrainingEnv):
+# 自定义模型结构
+policy_kwargs = dict(
+        net_arch=[64, 64, 64]  # 指定隐藏层结构
+    )
+
+def train(env: myTrainingEnv, eval_env: myTrainingEnv, cuda=None):
     output_dir = env.get_output_dir_path()
+    ppo_n_steps = 4096
 
-    model = PPO(policy="MlpPolicy", env=env, learning_rate=cosine_decay, verbose=1, seed=100, device="cuda", tensorboard_log=output_dir)
-    model = model.load("model.zip", env, device="cuda")
+    model = PPO(policy="MlpPolicy", env=env, learning_rate=cosine_decay, n_steps=ppo_n_steps, policy_kwargs=policy_kwargs, seed=env.seed, tensorboard_log=output_dir, verbose=1, device="cpu")
+    # model = PPO.load("output/1203/1833_n_steps-3_score50/best_score_model.zip", env, device="cpu")
+    # model.set_parameters('output/1203/1833_n_steps-3_score50/best_score_model.zip')
+    print(model.policy)
 
-    callback = TensorboardCallback(verbose=1)
-    model.learn(total_timesteps=env.max_epoch*env.max_steps, callback=callback)
+    # callback
+    # 自定义log
+    tb_callback = TensorboardCallback(log_freq=ppo_n_steps, verbose=0)
+    # 创建 EvalCallback 来定期评估模型并保存最优模型
+    # eval_callback = CustomEpochEvalCallback(eval_env=eval_env, eval_freq=ppo_n_steps * 20, eval_epochs=100)
+    
+    model.learn(total_timesteps=env.max_epoch*env.max_steps, callback=[tb_callback])
 
     model.save(os.path.join(output_dir, "model"))
 
@@ -280,10 +418,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Training parameters as follow: ")
     parser.add_argument('--log', action='store_true', help="Enable logging")
     parser.add_argument('--seed', type=int, default=100)
+    parser.add_argument('--n_state_steps', type=int, required=True)
+    # parser.add_argument('--cuda', type=int, default=0)
     args = parser.parse_args()
     
-    num_episodes = 1000
-    env = myTrainingEnv(num_episodes, is_senior=True, seed=args.seed, is_log=args.log)
-    train(env)
+    num_episodes = 3000
+    env = myTrainingEnv(num_episodes, args.n_state_steps, is_senior=True, seed=args.seed, is_log=args.log)
+    eval_env = myTrainingEnv(num_episodes, args.n_state_steps, is_senior=True, seed=args.seed)
+    train(env, eval_env)
 
 

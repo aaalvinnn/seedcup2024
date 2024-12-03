@@ -12,7 +12,10 @@
             "console": "integratedTerminal",
             "args": [
                 // // "${command:pickArgs}"
-                // "--config_path", "config/PPO_reward_12_test_1127/PPO_1.json",// , "--log"
+                // "--config_path", "config/PPO_reward_12_test_1127/PPO_1.json",
+                "--seed", "100", 
+                "--log",
+                "--n_state_steps", "1",
                 // "--output_csv", "test.csv"
             ]
         }

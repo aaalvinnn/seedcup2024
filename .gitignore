@@ -1,5 +1,6 @@
-/output
+/output_old
 /__pycache__
 model_best.pth
 /wandb
 /FR5_Reinforcement-learning\logs\PPO\1105-172056
+/output
