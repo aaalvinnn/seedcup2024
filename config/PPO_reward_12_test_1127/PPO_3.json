@@ -1,5 +1,5 @@
 {
-    "config_name": "PPO-1",
+    "config_name": "PPO-3",
     "algorithm": "PPO",
     "actor_lr": 3e-5,
     "critic_lr": 3e-4,
@@ -8,8 +8,8 @@
     "actor_hidden_dim": 64,
     "critic_hidden_dim": 64,
     "action_dim": 6,
-    "num_actor_hidden_layers": 4,
-    "num_critic_hidden_layers": 4,
+    "num_actor_hidden_layers": 6,
+    "num_critic_hidden_layers": 6,
     "gamma": 0.99,
     "lmbda": 0.95,
     "epochs": 10,

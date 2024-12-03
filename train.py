@@ -321,7 +321,6 @@ def seed_everything(seed=100):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-
 def train_one_config(config_file_path, is_log, seed):
     # TRY NOT TO MODIFY: seeding
     seed_everything(seed)
