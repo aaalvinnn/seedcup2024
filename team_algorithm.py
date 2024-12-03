@@ -71,7 +71,7 @@ class MyCustomAlgorithm(BaseAlgorithm):
 # 示例：使用PPO预训练模型
 class PPOAlgorithm(BaseAlgorithm):
     def __init__(self):
-        self.model = PPO.load("ppo_stablebaselines3_env.zip", device="cpu")
+        self.model = PPO.load("output/1203/0950/model.zip", device="cpu")
 
     def get_action(self, observation):
         action, _ = self.model.predict(observation)

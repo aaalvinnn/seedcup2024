@@ -42,8 +42,8 @@ def main(algorithm):
     return final_score, avg_distance, total_obstacle, avg_steps
 
 if __name__ == "__main__":
-    # algorithm = PPOAlgorithm()
-    algorithm = MyCustomAlgorithm()
+    algorithm = PPOAlgorithm()
+    # algorithm = MyCustomAlgorithm()
     start_time = time.time()
     main(algorithm)
     end_time = time.time()
