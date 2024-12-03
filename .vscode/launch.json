@@ -11,9 +11,9 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                // "${command:pickArgs}"
-                "--config_path", "config/PPO_reward_12_test_1127/PPO_1.json",// , "--log"
-                "--output_csv", "test.csv"
+                // // "${command:pickArgs}"
+                // "--config_path", "config/PPO_reward_12_test_1127/PPO_1.json",// , "--log"
+                // "--output_csv", "test.csv"
             ]
         }
     ]

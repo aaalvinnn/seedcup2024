@@ -11,10 +11,11 @@ class Env:
         self.seed = seed
         self.is_senior = is_senior
         self.step_num = 0
-        self.max_steps = 100
+        self.max_steps = 200
         self.p = bullet_client.BulletClient(connection_mode=p.GUI if gui else p.DIRECT)
         self.p.setGravity(0, 0, -9.81)
         self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
+        self.random_velocity = np.random.uniform(-0.02, 0.02, 2)
         self.init_env()
 
     def init_env(self):
@@ -46,6 +47,11 @@ class Env:
 
         self.obstacle1_position = [np.random.uniform(-0.2, 0.2, 1) + self.goalx[0], 0.6, np.random.uniform(0.1, 0.3, 1)]
         self.p.resetBasePositionAndOrientation(self.obstacle1, self.obstacle1_position, [0, 0, 0, 1])
+
+        # 设置目标朝x z平面赋予随机速度
+        self.random_velocity = np.random.uniform(-0.02, 0.02, 2)
+        self.p.resetBaseVelocity(self.target, linearVelocity=[self.random_velocity[0], 0, self.random_velocity[1]])
+        
         for _ in range(100):
             self.p.stepSimulation()
 
@@ -69,13 +75,18 @@ class Env:
         fr5_joint_angles = np.array(joint_angles) + (np.array(action[:6]) / 180 * np.pi)
         gripper = np.array([0, 0])
         angle_now = np.hstack([fr5_joint_angles, gripper])
-        # self.reward()
+        self.reward()
         self.p.setJointMotorControlArray(self.fr5, [1, 2, 3, 4, 5, 6, 8, 9], p.POSITION_CONTROL, targetPositions=angle_now)
 
         for _ in range(20):
             self.p.stepSimulation()
 
-        self.reward()
+        # 检查目标位置并反向速度
+        target_position = self.p.getBasePositionAndOrientation(self.target)[0]
+        if target_position[0] > 0.5 or target_position[0] < -0.5:
+            self.p.resetBaseVelocity(self.target, linearVelocity=[-self.random_velocity[0], 0, self.random_velocity[1]])
+        if target_position[2] > 0.5 or target_position[2] < 0.1:
+            self.p.resetBaseVelocity(self.target, linearVelocity=[self.random_velocity[0], 0, -self.random_velocity[1]])
 
         return self.observation
 
@@ -100,7 +111,6 @@ class Env:
 
         # 计算奖励
         if self.get_dis() < 0.05 and self.step_num <= self.max_steps:
-            dist = self.get_dis()
             self.success_reward = 100
             if self.obstacle_contact:
                 if self.is_senior:
@@ -132,25 +142,3 @@ class Env:
 
     def close(self):
         self.p.disconnect()
-
-    # 以下为暴露给train.py的接口
-    def is_obstacle_contact(self):
-        """
-        判断是否接触到障碍物，在不修改env.py的情况下，作为接口供train.py使用
-        """
-        # 获取与桌子和障碍物的接触点
-        table_contact_points = self.p.getContactPoints(bodyA=self.fr5, bodyB=self.table)
-        obstacle1_contact_points = self.p.getContactPoints(bodyA=self.fr5, bodyB=self.obstacle1)
-
-        for contact_point in table_contact_points or obstacle1_contact_points:
-            link_index = contact_point[3]
-            if link_index not in [0, 1]:
-                return True
-            
-        return False
-    
-    def get_step_now(self):
-        return self.step_num
-    
-    def get_score(self):
-        return self.success_reward
