@@ -72,7 +72,7 @@ class MyCustomAlgorithm(BaseAlgorithm):
 # 示例：使用PPO预训练模型
 class PPOAlgorithm(BaseAlgorithm):
     def __init__(self):
-        self.model = PPO.load("output/1203/1948_n_steps-3_score65/best_score_model.zip", device="cpu")
+        self.model = PPO.load("output/1204/1237_n_steps-10/best_score_model.zip", device="cpu")
         # 多步观测
         self.n_state_steps = self.model.observation_space.shape[0]
         self.state_buffer = deque(maxlen=self.n_state_steps)
