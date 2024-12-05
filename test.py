@@ -1,5 +1,5 @@
 from env import Env
-from team_algorithm import PPOAlgorithm, MyCustomAlgorithm
+from team_algorithm import MyCustomAlgorithm
 import time
 
 def main(algorithm):
@@ -42,8 +42,8 @@ def main(algorithm):
     return final_score, avg_distance, total_obstacle, avg_steps
 
 if __name__ == "__main__":
-    algorithm = PPOAlgorithm()
-    # algorithm = MyCustomAlgorithm()
+    # algorithm = PPOAlgorithm()
+    algorithm = MyCustomAlgorithm()
     start_time = time.time()
     main(algorithm)
     end_time = time.time()

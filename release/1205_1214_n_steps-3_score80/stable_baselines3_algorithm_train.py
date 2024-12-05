@@ -379,7 +379,7 @@ class CustomEpochEvalCallback(BaseCallback):
         
         return True
     
-def cosine_decay(progress, max_lr=1e-4, min_lr=5e-5):
+def cosine_decay(progress, max_lr=3e-4, min_lr=1e-4):
     """
     使用余弦衰减算法计算学习率，最大值为 `max_lr`，最小值为 `min_lr`。
     
@@ -403,7 +403,7 @@ def train(env: myTrainingEnv, eval_env: myTrainingEnv, cuda=None):
 
     model = PPO(policy="MlpPolicy", env=env, learning_rate=cosine_decay, n_steps=ppo_n_steps, policy_kwargs=policy_kwargs, seed=env.seed, tensorboard_log=output_dir, verbose=1, device="cuda")
     # model = PPO.load("output/1203/1833_n_steps-3_score50/best_score_model.zip", env, device="cpu")
-    model.set_parameters(f'output/1205/1412_n_steps-{env.n_state_steps}/model.zip')
+    model.set_parameters(f'output/1205/0949_n_steps-{env.n_state_steps}/model.zip')
     print(model.policy)
 
     # callback
@@ -424,7 +424,7 @@ if __name__ == "__main__":
     # parser.add_argument('--cuda', type=int, default=0)
     args = parser.parse_args()
     
-    num_episodes = 3000
+    num_episodes = 5000
     env = myTrainingEnv(num_episodes, args.n_state_steps, is_senior=True, seed=args.seed, is_log=args.log)
     eval_env = myTrainingEnv(num_episodes, args.n_state_steps, is_senior=True, seed=args.seed)
     train(env, eval_env)

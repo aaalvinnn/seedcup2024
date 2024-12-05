@@ -1,8 +1,5 @@
 from stable_baselines3 import PPO
 from abc import ABC, abstractmethod
-import torch
-import torch.nn.functional as F
-import os
 import numpy as np
 from collections import deque
 
@@ -21,58 +18,9 @@ class BaseAlgorithm(ABC):
         """
         pass
 
-class PolicyNet(torch.nn.Module):
-    def __init__(self, state_dim, hidden_dim, num_hidden_layers, action_dim, action_bound):
-        super(PolicyNet, self).__init__()
-        self.action_bound = action_bound
-        # input layer
-        self.layers = torch.nn.ModuleList()
-        self.layers.append(torch.nn.Linear(state_dim, hidden_dim))
-
-        # hidden layers
-        for _ in range(num_hidden_layers - 1):
-            self.layers.append(torch.nn.Linear(hidden_dim, hidden_dim))
-
-        # output layers
-        self.fc_mu = torch.nn.Linear(hidden_dim, action_dim)
-        self.fc_std = torch.nn.Linear(hidden_dim, action_dim)
-
-    def forward(self, x):
-        for i, layer in enumerate(self.layers):
-            x = F.relu(layer(x))
-
-        mu = self.fc_mu(x)
-        std = F.softplus(self.fc_std(x))
-        dist = torch.distributions.Normal(mu, std)
-        normal_sample = dist.rsample()
-        log_prob = dist.log_prob(normal_sample)
-        action = torch.tanh(normal_sample)
-        log_prob = log_prob - torch.log(1 - torch.tanh(action).pow(2) + 1e-7)
-        action = action * self.action_bound
-        return action, log_prob
-
 class MyCustomAlgorithm(BaseAlgorithm):
     def __init__(self):
-        self.state_dim = 12
-        self.hidden_dim = 64
-        self.num_hidden_layers = 6
-        self.action_dim = 6
-        self.actor = PolicyNet(self.state_dim, self.hidden_dim, self.num_hidden_layers, self.action_dim, 1)
-        model_path = os.path.join(os.path.dirname(__file__), "model.pth")
-        self.actor.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
-        self.actor.eval()
-        pass
-    
-    def get_action(self, state):
-        state = np.concatenate([state[0]], axis=-1)
-        state = torch.tensor([state], dtype=torch.float)
-        action = self.actor(state)[0]
-        return np.array(action.squeeze(0).tolist()) 
-
-# 示例：使用PPO预训练模型
-class PPOAlgorithm(BaseAlgorithm):
-    def __init__(self):
-        self.model = PPO.load("output/1204/1237_n_steps-10/best_score_model.zip", device="cpu")
+        self.model = PPO.load("output/1205/1908_n_steps-3/best_score_model.zip", device="cpu")
         # 多步观测
         self.n_state_steps = self.model.observation_space.shape[0]
         self.state_buffer = deque(maxlen=self.n_state_steps)
