@@ -250,12 +250,12 @@ class myTrainingEnv(gym.Env):
         dist = self.get_dis()
         # 1. 鼓励机械臂向目标物体前进
         delta = (dist - self.pre_dist)
-        reward -= delta * 1000
+        reward -= delta * 800
         self.pre_dist = dist
 
         # 2. 移动时碰到障碍物
         if self.is_obstacle_contact():
-            reward -= 6 + self.n_obstacles * 0.15
+            reward -= 6 + self.n_obstacles * 0.1
             self.n_obstacles += 1
         
         # 3. 最小化step数
@@ -267,6 +267,22 @@ class myTrainingEnv(gym.Env):
 
         return reward
 
+    # def get_reward(self):
+    #     dist = self.get_dis()
+    #     # 1. 鼓励机械臂向目标物体前进
+    #     delta = (dist - self.pre_dist)
+    #     self.training_reward -= delta * 500
+    #     self.pre_dist = dist
+
+    #     # 2. 移动时碰到障碍物
+    #     if self.is_obstacle_contact():
+    #         self.training_reward -= 3
+
+    #     # 3. 到达奖励
+    #     if dist < 0.05 or self.step_num <= self.max_steps:
+    #         self.training_reward += self.success_reward
+
+    #     return self.training_reward
 
 class TensorboardCallback(BaseCallback):
     """
@@ -276,7 +292,6 @@ class TensorboardCallback(BaseCallback):
     def __init__(self, log_freq, verbose=1):
         super().__init__(verbose)
         self.log_freq = log_freq
-        self.movingAverage_episode_score = []
         self.episode_score = []
         self.episode_obstacles = []
         self.episode_dist = []
@@ -298,9 +313,8 @@ class TensorboardCallback(BaseCallback):
 
             output_dir = self.training_env.get_attr('output_dir')[0]
             self.model.save(os.path.join(output_dir, "model"))
-            self.movingAverage_episode_score.append(np.mean(self.episode_score))
-            if len(self.movingAverage_episode_score) >= 10 and np.mean(self.movingAverage_episode_score[-10:]) >= self.best_score:
-                self.best_score = np.mean(self.movingAverage_episode_score[-10:])
+            if np.mean(self.episode_score) >= self.best_score:
+                self.best_score = np.mean(self.episode_score)
                 self.model.save(os.path.join(output_dir, "best_score_model"))
 
             self.episode_score.clear()
@@ -365,7 +379,7 @@ class CustomEpochEvalCallback(BaseCallback):
         
         return True
     
-def cosine_decay(progress, max_lr=3e-4, min_lr=1e-4):
+def cosine_decay(progress, max_lr=1e-4, min_lr=5e-5):
     """
     使用余弦衰减算法计算学习率，最大值为 `max_lr`，最小值为 `min_lr`。
     
@@ -396,7 +410,7 @@ def train(env: myTrainingEnv, eval_env: myTrainingEnv, cuda=None):
     # 自定义log
     tb_callback = TensorboardCallback(log_freq=ppo_n_steps, verbose=0)
     # 创建 EvalCallback 来定期评估模型并保存最优模型
-    # eval_callback = CustomEpochEvalCallback(eval_env=eval_env, eval_freq=ppo_n_steps, eval_epochs=100)
+    # eval_callback = CustomEpochEvalCallback(eval_env=eval_env, eval_freq=ppo_n_steps * 20, eval_epochs=100)
     
     model.learn(total_timesteps=env.max_epoch*env.max_steps, callback=[tb_callback])
 
@@ -410,9 +424,9 @@ if __name__ == "__main__":
     # parser.add_argument('--cuda', type=int, default=0)
     args = parser.parse_args()
     
-    num_episodes = 8000
+    num_episodes = 5000
     env = myTrainingEnv(num_episodes, args.n_state_steps, is_senior=True, seed=args.seed, is_log=args.log)
-    eval_env = myTrainingEnv(num_episodes, args.n_state_steps, is_senior=True, seed=1000)
+    eval_env = myTrainingEnv(num_episodes, args.n_state_steps, is_senior=True, seed=args.seed)
     train(env, eval_env)
 
 

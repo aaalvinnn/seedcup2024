@@ -20,7 +20,7 @@ class BaseAlgorithm(ABC):
 
 class MyCustomAlgorithm(BaseAlgorithm):
     def __init__(self):
-        self.model = PPO.load("output/1205/1908_n_steps-3/best_score_model.zip", device="cpu")
+        self.model = PPO.load("output/1206/1659_n_steps-5_score90/model.zip", device="cpu")
         # 多步观测
         self.n_state_steps = self.model.observation_space.shape[0]
         self.state_buffer = deque(maxlen=self.n_state_steps)

@@ -3,7 +3,7 @@ from team_algorithm import MyCustomAlgorithm
 import time
 
 def main(algorithm):
-    env = Env(is_senior=True,seed=100,gui=False)
+    env = Env(is_senior=True,seed=200,gui=False)
     done = False
     num_episodes = 100
     final_score = 0
